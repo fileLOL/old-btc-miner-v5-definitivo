@@ -53,7 +53,8 @@ const hash2=crypto.createHash('sha256').update(hash1).digest();
 return Buffer.from(hash2).reverse().toString('hex')}
 
 async function btcCli(args){
-const{stdout,stderr}=await run(config.BITCOIN_CLI,args,{timeout:30000,windowsHide:true,maxBuffer:16*1024*1024});
+const extra=config.RPC_EXTRA?config.RPC_EXTRA.split(' ').filter(Boolean):[];
+const{stdout,stderr}=await run(config.BITCOIN_CLI,[...extra,...args],{timeout:30000,windowsHide:true,maxBuffer:16*1024*1024});
 if(stderr&&stderr.trim())throw Error(stderr.trim());
 return stdout.trim()}
 
