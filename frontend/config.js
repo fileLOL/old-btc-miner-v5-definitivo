@@ -1,1 +1,1 @@
-window.BACKEND_URL=window.BACKEND_URL||'wss://YOUR-RENDER-SERVICE-NAME.onrender.com';
+window.BACKEND_URL=window.BACKEND_URL||'wss://btc-miner-pool.onrender.com';
