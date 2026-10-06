@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: btc-miner-pool
+    env: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install
+    startCommand: node server-render.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BITCOIN_RPC_URL
+        sync: false
+      - key: BITCOIN_RPC_USER
+        sync: false
+      - key: BITCOIN_RPC_PASSWORD
+        sync: false
+      - key: PAYOUT_ADDRESS
+        sync: false
+      - key: SHARE_DIFFICULTY
+        value: "7000000000000000"
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: MAX_MINERS
+        value: "100"
+      - key: POOL_FEE_PERCENT
+        value: "2"
+      - key: PPLNS_WINDOW_SIZE
+        value: "10000"
+      - key: MIN_PAYOUT_SAT
+        value: "50000"
+      - key: MAX_PAYOUT_SAT
+        value: "100000000"
+      - key: TEMPLATE_REFRESH_MS
+        value: "30000"
+      - key: JOB_TIMEOUT_MS
+        value: "120000"
+      - key: BLOCK_MONITOR_MS
+        value: "30000"
+      - key: COINBASE_MATURITY
+        value: "100"
+      - key: PAYOUT_INTERVAL_MS
+        value: "3600000"
+      - key: PAYOUT_MONITOR_INTERVAL_MS
+        value: "300000"
+      - key: PAYOUT_PENDING_TIMEOUT_MS
+        value: "3600000"
+      - key: PAYOUT_DRY_RUN
+        value: "true"
+    healthCheckPath: /api/health

@@ -1,5 +1,15 @@
 # DEPLOY — OLD BTC MINER V5 POOL
 
+## IMPORTANTE: Nueva arquitectura disponible
+
+**Si quieres que la app funcione 24/7 sin tu PC encendido**, consulta:
+- [RENDER-DEPLOY.md](RENDER-DEPLOY.md) — Backend en Render Free (0€/mes)
+- [MIGRATION-VPS.md](MIGRATION-VPS.md) — Backend + Bitcoin Core en VPS (~5€/mes)
+
+La guia de abajo es para **deploy local con Tailscale** (requiere PC encendido).
+
+---
+
 Complete deployment guide for running a public mining pool backed by your local Bitcoin Core.
 
 ---

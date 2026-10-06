@@ -33,11 +33,20 @@ if(!ws||ws.readyState!==1){connectWS()}}
 catch(e){errEl.textContent='ERROR: '+e.message;log('REGISTER FAILED: '+e.message)}}
 $('registerWallet').onclick=registerWallet;
 $('walletInput').addEventListener('keydown',e=>{if(e.key==='Enter')registerWallet()});
+let wsRetries=0,wsMaxRetries=5,wsReconnectTimer=null;
+function scheduleWsReconnect(){
+if(wsReconnectTimer)return;
+if(wsRetries>=wsMaxRetries){log('WS GAVE UP AFTER '+wsMaxRetries+' ATTEMPTS // CHECK BACKEND');return}
+wsRetries++;
+const delay=Math.min(5000*wsRetries,30000);
+log('WS RECONNECTING ('+wsRetries+'/'+wsMaxRetries+') IN '+(delay/1000)+'s...');
+wsReconnectTimer=setTimeout(()=>{wsReconnectTimer=null;connectWS()},delay)}
 function connectWS(){
 const backendUrl=window.BACKEND_URL||location.origin.replace(/^http/,'ws');
 const wsUrl=backendUrl+'/ws';
-try{ws=new WebSocket(wsUrl)}catch(e){log('WS CONNECT FAILED: '+e.message);return}
-ws.onopen=()=>{log('WEBSOCKET CONNECTED')};
+if(ws&&ws.readyState<=1)return;
+try{ws=new WebSocket(wsUrl)}catch(e){log('WS CONNECT FAILED: '+e.message);scheduleWsReconnect();return}
+ws.onopen=()=>{log('WEBSOCKET CONNECTED');wsRetries=0};
 ws.onmessage=e=>{
 const msg=JSON.parse(e.data);
 if(msg.type==='welcome'){if(!minerId)minerId=msg.minerId;log('MINER ID: '+minerId);
@@ -65,7 +74,7 @@ else if(msg.type==='blockFound'){log('BLOCK FOUND BY '+msg.minerId+' AT HEIGHT '
 else if(msg.type==='blockAccepted'){log('BLOCK ACCEPTED AT HEIGHT '+msg.height);$('minerStatus').textContent='BLOCK ACCEPTED!'}
 else if(msg.type==='blockRejected'){log('BLOCK REJECTED: '+msg.reason)}
 else if(msg.type==='error'){log('SERVER ERROR: '+msg.error)}};
-ws.onclose=()=>{log('WEBSOCKET DISCONNECTED // RECONNECTING...');setTimeout(connectWS,5000)};
+ws.onclose=()=>{log('WEBSOCKET DISCONNECTED');ws=null;scheduleWsReconnect()};
 ws.onerror=()=>{}}
 function updatePoolUI(stats){
 if($('poolShares'))$('poolShares').textContent=myShares.toString();
