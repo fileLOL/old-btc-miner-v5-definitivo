@@ -19,6 +19,7 @@ const PayoutProcessor = require('./lib/payout-processor');
 const PayoutMonitor = require('./lib/payout-monitor');
 const AuditLog = require('./lib/audit');
 const TestPayoutRunner = require('./lib/test-payout-runner');
+const MempoolAPI = require('./lib/mempool-api');
 
 const app = express();
 const server = http.createServer(app);
@@ -180,11 +181,31 @@ app.get('/api/status', async (_q, r) => {
       difficulty: chainInfo.difficulty,
       networkhashps: miningInfo.networkhashps,
       warnings: miningInfo.warnings || '',
-      bitcoin_core: 'online'
+      bitcoin_core: 'online',
+      source: 'bitcoin-core'
     })
   } catch (e) {
     bitcoinCoreOnline = false;
-    r.json({ ok: true, bitcoin_core: 'offline', error: e.message, blocks: 0, headers: 0, chain: 'unknown', difficulty: 0, networkhashps: 0, verificationprogress: 0, warnings: 'Bitcoin Core unreachable' })
+    try {
+      const [chainInfo, miningInfo] = await Promise.all([
+        MempoolAPI.getBlockchainInfo(),
+        MempoolAPI.getMiningInfo()
+      ]);
+      r.json({
+        ok: true,
+        chain: chainInfo.chain,
+        blocks: chainInfo.blocks,
+        headers: chainInfo.headers,
+        verificationprogress: chainInfo.verificationprogress,
+        difficulty: miningInfo.difficulty,
+        networkhashps: miningInfo.networkhashps,
+        warnings: miningInfo.warnings || '',
+        bitcoin_core: 'offline',
+        source: 'mempool-space'
+      })
+    } catch (e2) {
+      r.json({ ok: false, bitcoin_core: 'offline', error: 'Both Bitcoin Core and Mempool API unreachable', blocks: 0, headers: 0, chain: 'unknown', difficulty: 0, networkhashps: 0, verificationprogress: 0 })
+    }
   }
 });
 
