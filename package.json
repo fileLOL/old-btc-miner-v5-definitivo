@@ -1,6 +1,6 @@
 {
   "name": "old-btc-miner-v5",
-  "version": "5.1.0",
+  "version": "5.1.1",
   "private": true,
   "description": "Bitcoin Core mainnet CPU solo-mining pool dashboard and browser worker",
   "main": "server.js",
