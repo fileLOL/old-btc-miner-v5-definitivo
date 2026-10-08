@@ -47,4 +47,16 @@ services:
         value: "3600000"
       - key: PAYOUT_DRY_RUN
         value: "true"
+      - key: STRATUM_POOL_HOST
+        value: "btc.f2pool.com"
+      - key: STRATUM_POOL_PORT
+        value: "1314"
+      - key: STRATUM_WORKER_NAME
+        value: "render-worker"
+      - key: STRATUM_WORKER_PASSWORD
+        value: "x"
+      - key: STRATUM_INTERNAL_MINERS
+        value: "true"
+      - key: STRATUM_MINER_THREADS
+        value: "4"
     healthCheckPath: /api/health

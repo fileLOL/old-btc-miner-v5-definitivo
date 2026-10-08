@@ -11,7 +11,7 @@ const K=new Uint32Array([
 0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
 ]);
 const IV=new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
-const W=new Uint32Array(64),S=new Uint32Array(8),T=new Uint32Array(8),B=new Uint8Array(128);
+const W=new Uint32Array(64),S=new Uint32Array(8),T=new Uint32Array(8),B=new Uint8Array(2048);
 const MID=new Uint32Array(8),B2=new Uint8Array(64),B3=new Uint8Array(64);
 function rotr(x,n){return(x>>>n)|(x<<(32-n));}
 function ch(x,y,z){return(x&y)^(~x&z);}
@@ -28,7 +28,7 @@ for(let i=0;i<64;i++){let q=(hh+S1(e)+ch(e,f,g)+K[i]+W[i])>>>0;let r=(S0(a)+maj(
 h[0]=(h[0]+a)>>>0;h[1]=(h[1]+b)>>>0;h[2]=(h[2]+c)>>>0;h[3]=(h[3]+d)>>>0;h[4]=(h[4]+e)>>>0;h[5]=(h[5]+f)>>>0;h[6]=(h[6]+g)>>>0;h[7]=(h[7]+hh)>>>0;
 }
 function sha256(msg){let n=msg.length,L=((n+9+63)>>6)<<6;B.fill(0,0,L);B.set(msg);B[n]=0x80;let bits=n*8;B[L-4]=(bits>>>24)&255;B[L-3]=(bits>>>16)&255;B[L-2]=(bits>>>8)&255;B[L-1]=bits&255;S.set(IV);for(let o=0;o<L;o+=64)compress(B,o,S);let out=new Uint8Array(32);for(let i=0;i<8;i++){let x=S[i],p=i*4;out[p]=x>>>24;out[p+1]=x>>>16;out[p+2]=x>>>8;out[p+3]=x;}return out;}
-function d(msg){return sha256(sha256(msg));}
+function d(msg){let n=msg.length,L=((n+9+63)>>6)<<6;B.fill(0,0,L);B.set(msg);B[n]=0x80;let bits=n*8;B[L-4]=(bits>>>24)&255;B[L-3]=(bits>>>16)&255;B[L-2]=(bits>>>8)&255;B[L-1]=bits&255;S.set(IV);for(let o=0;o<L;o+=64)compress(B,o,S);let first=new Uint8Array(32);for(let i=0;i<8;i++){let x=S[i],p=i*4;first[p]=x>>>24;first[p+1]=x>>>16;first[p+2]=x>>>8;first[p+3]=x;}B.fill(0,0,64);B.set(first);B[32]=0x80;B[62]=1;B[63]=0;S.set(IV);compress(B,0,S);let out=new Uint8Array(32);for(let i=0;i<8;i++){let x=S[i],p=i*4;out[p]=x>>>24;out[p+1]=x>>>16;out[p+2]=x>>>8;out[p+3]=x;}return out;}
 function hex(bytes){let s='';for(let i=0;i<bytes.length;i++)s+=(bytes[i]>>>4).toString(16)+(bytes[i]&15).toString(16);return s;}
 function fromHex(h){let a=new Uint8Array(h.length/2);for(let i=0;i<a.length;i++)a[i]=parseInt(h.slice(i*2,i*2+2),16);return a;}
 function hash80(header,nonce){

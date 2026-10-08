@@ -20,6 +20,7 @@ const PayoutMonitor = require('./lib/payout-monitor');
 const AuditLog = require('./lib/audit');
 const TestPayoutRunner = require('./lib/test-payout-runner');
 const MempoolAPI = require('./lib/mempool-api');
+const StratumClient = require('./lib/stratum-client');
 
 const app = express();
 const server = http.createServer(app);
@@ -116,30 +117,37 @@ async function rpcCall(method, params = []) {
 
 let lastTemplateHeight = null;
 let bitcoinCoreOnline = false;
+let stratumClient = null;
+let stratumConnected = false;
 
-async function refreshTemplate() {
-  try {
-    const t = await rpcCall('getblocktemplate', [{ rules: ['segwit'] }]);
-    if (!bitcoinCoreOnline) {
-      bitcoinCoreOnline = true;
-      console.log('[Bitcoin Core] Connected');
-    }
-    if (t.height !== lastTemplateHeight) {
-      lastTemplateHeight = t.height;
-      const job = jobManager.setTemplate(t);
-      broadcastJob(job)
-    } else if (jobManager.currentTemplate && t.previousblockhash !== jobManager.currentTemplate.previousblockhash) {
-      const job = jobManager.setTemplate(t);
-      broadcastJob(job)
-    }
-  } catch (e) {
-    if (bitcoinCoreOnline) {
-      bitcoinCoreOnline = false;
-      console.error('[Bitcoin Core] Disconnected:', e.message);
+function initStratum() {
+  stratumClient = new StratumClient(config, jobManager);
+  stratumClient.onNewJob = (job) => {
+    broadcastJob(job);
+  };
+  stratumClient.onShare = (status, info) => {
+    if (status === 'accepted') {
+      console.log('[Stratum] Share accepted by pool');
     } else {
-      console.error('[Template refresh] Bitcoin Core offline');
+      console.log('[Stratum] Share rejected:', info);
     }
-  }
+  };
+  stratumClient.onBlock = (job, nonce, hashHex) => {
+    console.log('[Stratum] BLOCK FOUND! Hash:', hashHex);
+    broadcastBlockFound('internal-miner', job.height || 0);
+  };
+  stratumClient.onStatus = (status, hashrate) => {
+    if (status === 'connected') {
+      stratumConnected = true;
+      console.log('[Stratum] Pool connected');
+    } else if (status === 'disconnected') {
+      stratumConnected = false;
+      console.log('[Stratum] Pool disconnected');
+    } else if (status === 'mining') {
+      // Internal miner hashrate report
+    }
+  };
+  stratumClient.connect();
 }
 
 function broadcastJob(job) {
@@ -168,44 +176,24 @@ function startBroadcastLoop() {
 app.get('/api/status', async (_q, r) => {
   try {
     const [chainInfo, miningInfo] = await Promise.all([
-      rpcCall('getblockchaininfo'),
-      rpcCall('getmininginfo')
+      MempoolAPI.getBlockchainInfo(),
+      MempoolAPI.getMiningInfo()
     ]);
-    bitcoinCoreOnline = true;
     r.json({
       ok: true,
       chain: chainInfo.chain,
       blocks: chainInfo.blocks,
       headers: chainInfo.headers,
-      verificationprogress: chainInfo.verificationprogress,
-      difficulty: chainInfo.difficulty,
-      networkhashps: miningInfo.networkhashps,
+      verificationProgress: chainInfo.verificationprogress,
+      difficulty: miningInfo.difficulty,
+      networkHashps: miningInfo.networkhashps,
       warnings: miningInfo.warnings || '',
-      bitcoin_core: 'online',
-      source: 'bitcoin-core'
+      bitcoin_core: stratumConnected ? 'online' : 'offline',
+      source: stratumConnected ? 'stratum-pool' : 'mempool-space',
+      pool: stratumClient ? stratumClient.getStatus() : null
     })
   } catch (e) {
-    bitcoinCoreOnline = false;
-    try {
-      const [chainInfo, miningInfo] = await Promise.all([
-        MempoolAPI.getBlockchainInfo(),
-        MempoolAPI.getMiningInfo()
-      ]);
-      r.json({
-        ok: true,
-        chain: chainInfo.chain,
-        blocks: chainInfo.blocks,
-        headers: chainInfo.headers,
-        verificationprogress: chainInfo.verificationprogress,
-        difficulty: miningInfo.difficulty,
-        networkhashps: miningInfo.networkhashps,
-        warnings: miningInfo.warnings || '',
-        bitcoin_core: 'offline',
-        source: 'mempool-space'
-      })
-    } catch (e2) {
-      r.json({ ok: false, bitcoin_core: 'offline', error: 'Both Bitcoin Core and Mempool API unreachable', blocks: 0, headers: 0, chain: 'unknown', difficulty: 0, networkhashps: 0, verificationprogress: 0 })
-    }
+    r.json({ ok: false, bitcoin_core: 'offline', error: 'Mempool API unreachable', blocks: 0, headers: 0, chain: 'unknown', difficulty: 0, networkhashps: 0, verificationProgress: 0 })
   }
 });
 
@@ -218,39 +206,32 @@ app.get('/api/wallet', async (_q, r) => {
 });
 
 app.get('/api/template', async (_q, r) => {
-  try {
-    const t = await rpcCall('getblocktemplate', [{ rules: ['segwit'] }]);
-    r.json({
-      ok: true,
-      height: t.height,
-      previousblockhash: t.previousblockhash,
-      bits: t.bits,
-      target: t.target,
-      curtime: t.curtime,
-      mintime: t.mintime,
-      transactions: t.transactions?.length || 0,
-      coinbasevalue: t.coinbasevalue,
-      raw: t
-    })
-  } catch (e) { r.status(503).json({ ok: false, error: e.message }) }
+  const job = jobManager.getCurrentJob();
+  if (!job) {
+    try {
+      const chainInfo = await MempoolAPI.getBlockchainInfo();
+      r.json({ ok: true, height: chainInfo.blocks, source: 'mempool-pending' });
+    } catch (e) {
+      r.status(503).json({ ok: false, error: 'No job available' });
+    }
+    return;
+  }
+  r.json({
+    ok: true,
+    height: job.height || 0,
+    bits: job.nbits || job.bits || '---',
+    target: job.blockTarget ? Buffer.from(job.blockTarget).toString('hex') : '---',
+    source: 'stratum-pool',
+    jobId: job.jobId
+  });
 });
 
 app.get('/api/job', async (_req, res) => {
-  try {
-    const address = config.PAYOUT_ADDRESS;
-    if (!address) throw Error('Payout address not configured');
-
-    const t = await rpcCall('getblocktemplate', [{ rules: ['segwit'] }]);
-    let job = jobManager.getCurrentJob();
-
-    if (!job || job.height !== t.height || job.previousblockhash !== t.previousblockhash) {
-      job = jobManager.setTemplate(t);
-    }
-
-    res.json({ ok: true, ...job });
-  } catch (e) {
-    res.status(400).json({ ok: false, error: e.message });
+  const job = jobManager.getCurrentJob();
+  if (!job) {
+    return res.status(400).json({ ok: false, error: 'No job available. Waiting for pool...' });
   }
+  res.json({ ok: true, ...job });
 });
 
 app.post('/api/submit', async (req, res) => {
@@ -575,6 +556,9 @@ function handleMessage(ws, minerId, msg) {
     const miner = minerTracker.getMiner(minerId);
     if (miner && miner.accountId) { AuditLog.logShare(miner.accountId, result.jobId, config.SHARE_DIFFICULTY || 1) }
     ws.send(JSON.stringify({ type: 'shareAccepted', jobId: result.jobId, nonce: result.nonce }));
+    if (stratumClient && stratumClient.connected) {
+      stratumClient.submitBrowserShare(result.jobId, result.nonce, result.hashHex, result.meetsBlockTarget);
+    }
     if (result.meetsBlockTarget) {
       console.log(`BLOCK CANDIDATE from ${minerId}! Nonce: ${result.nonce}`);
       handleBlockCandidate(ws, minerId, result.jobId, result.nonce)
@@ -596,21 +580,28 @@ async function handleBlockCandidate(ws, minerId, jobId, nonce) {
   try {
     const job = jobManager.getJob(jobId);
     if (!job || job.stale) { ws.send(JSON.stringify({ type: 'blockRejected', reason: 'stale job' })); return }
-    const blockHex = buildBlock(job, nonce);
-    const blockHash = calculateBlockHash(blockHex);
-    console.log('Submitting block to Bitcoin Core...');
-    console.log('Block hash:', blockHash);
-    try {
-      const result = await rpcCall('submitblock', [blockHex]);
-      console.log('BLOCK ACCEPTED:', result || 'accepted');
+    if (stratumClient && stratumClient.connected) {
+      console.log('[Stratum] Block candidate submitted via pool');
       const miner = minerTracker.getMiner(minerId);
-      const blockResult = accountManager.insertBlock(miner ? miner.accountId : null, minerId, job.height, job.coinbasevalue || 0, blockHash);
-      minerTracker.recordBlock(job.height, miner ? miner.accountId : null, minerId, job.coinbasevalue || 0);
-      broadcastBlockFound(minerId, job.height);
-      ws.send(JSON.stringify({ type: 'blockAccepted', height: job.height, blockHash }))
-    } catch (e) {
-      console.error('Block rejected by Bitcoin Core:', e.message);
-      ws.send(JSON.stringify({ type: 'blockRejected', reason: e.message }))
+      const blockHash = calculateBlockHash(buildBlock(job, nonce));
+      minerTracker.recordBlock(job.height || 0, miner ? miner.accountId : null, minerId, 0);
+      broadcastBlockFound(minerId, job.height || 0);
+      ws.send(JSON.stringify({ type: 'blockAccepted', height: job.height || 0, blockHash }));
+    } else {
+      const blockHex = buildBlock(job, nonce);
+      const blockHash = calculateBlockHash(blockHex);
+      try {
+        const result = await rpcCall('submitblock', [blockHex]);
+        console.log('BLOCK ACCEPTED:', result || 'accepted');
+        const miner = minerTracker.getMiner(minerId);
+        accountManager.insertBlock(miner ? miner.accountId : null, minerId, job.height, job.coinbasevalue || 0, blockHash);
+        minerTracker.recordBlock(job.height, miner ? miner.accountId : null, minerId, job.coinbasevalue || 0);
+        broadcastBlockFound(minerId, job.height);
+        ws.send(JSON.stringify({ type: 'blockAccepted', height: job.height, blockHash }))
+      } catch (e) {
+        console.error('Block rejected:', e.message);
+        ws.send(JSON.stringify({ type: 'blockRejected', reason: e.message }))
+      }
     }
   } catch (err) {
     console.error('Block submission error:', err.message);
@@ -627,21 +618,14 @@ function broadcastBlockFound(minerId, height) {
   })
 }
 
-let templateInterval = null;
-function startTemplateRefresh() {
-  if (templateInterval) return;
-  templateInterval = setInterval(refreshTemplate, config.TEMPLATE_REFRESH_MS)
-}
-
 server.listen(PORT, '0.0.0.0', async () => {
-  const rpcUrl = process.env.BITCOIN_RPC_URL || config.BITCOIN_RPC_URL || 'http://127.0.0.1:8332';
-  const maskedUrl = rpcUrl.replace(/:\/\/([^@]+)@/, '://****@');
-  console.log(`OLD BTC MINER V5 POOL -> http://0.0.0.0:${PORT}`);
+  console.log(`OLD BTC MINER V5 HYBRID POOL -> http://0.0.0.0:${PORT}`);
   console.log(`WebSocket: ws://0.0.0.0:${PORT}/ws`);
-  console.log(`Bitcoin Core RPC: ${maskedUrl}`);
-  console.log(`Payout address: ${config.PAYOUT_ADDRESS ? '[CONFIGURED]' : '[NOT SET - edit .env]'}`);
+  console.log(`Stratum Pool: ${config.STRATUM_POOL_HOST}:${config.STRATUM_POOL_PORT}`);
+  console.log(`Worker: ${config.STRATUM_WORKER_NAME} | Internal miners: ${config.STRATUM_INTERNAL_MINERS} (${config.STRATUM_MINER_THREADS} threads)`);
+  console.log(`Payout address: ${config.PAYOUT_ADDRESS ? '[CONFIGURED]' : '[NOT SET]'}`);
   console.log(`Pool fee: ${config.POOL_FEE_PERCENT}% | PPLNS window: ${config.PPLNS_WINDOW_SIZE} | Min payout: ${config.MIN_PAYOUT_SAT} sat`);
-  console.log(`Payout mode: ${config.PAYOUT_DRY_RUN ? 'DRY RUN (no real payments)' : 'LIVE (real payments enabled)'}`);
+  console.log(`Payout mode: ${config.PAYOUT_DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
 
   try {
     console.log('[Startup] Checking for stale pending payouts...');
@@ -651,8 +635,7 @@ server.listen(PORT, '0.0.0.0', async () => {
     } else { console.log('[Startup] No stale pending payouts found') }
   } catch (e) { console.error('[Startup] Recovery error:', e.message) }
 
-  refreshTemplate();
-  startTemplateRefresh();
+  initStratum();
   startBroadcastLoop();
   blockMonitor.start();
   payoutMonitor.start();
@@ -671,7 +654,7 @@ server.listen(PORT, '0.0.0.0', async () => {
 
 process.on('SIGINT', () => {
   console.log('Shutting down...');
-  clearInterval(templateInterval);
+  if (stratumClient) stratumClient.disconnect();
   clearInterval(broadcastInterval);
   minerTracker.destroy();
   rateLimiter.destroy();
