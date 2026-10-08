@@ -326,10 +326,6 @@ console.log('[Session] Google not ready, retrying...');
 setTimeout(initGoogle,300);
 }
 }
-}else{
-console.log('[Session] Google not ready, retrying...');
-setTimeout(initGoogle,300);
-}}
 
 function getSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY))}catch(e){return null}}
 function saveSession(data){try{localStorage.setItem(SESSION_KEY,JSON.stringify(data))}catch(e){}}
