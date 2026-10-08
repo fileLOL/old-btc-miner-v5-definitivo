@@ -313,15 +313,18 @@ console.log('[Session] Google library detected, initializing...');
 try{
 google.accounts.id.initialize({
 client_id:GOOGLE_CLIENT_ID,
-callback:handleGoogleCredential,
-auto_select:false,
-cancel_on_tap_outside:true
+callback:handleGoogleCredential
 });
 googleReady=true;
 console.log('[Session] Google initialized successfully');
 }catch(e){
 console.error('[Session] Google init error:',e);
 googleReady=false;
+}
+}else{
+console.log('[Session] Google not ready, retrying...');
+setTimeout(initGoogle,300);
+}
 }
 }else{
 console.log('[Session] Google not ready, retrying...');
@@ -359,61 +362,44 @@ btn.textContent=b.text;
 btn.onclick=function(){
 console.log('[Session] Button clicked:',b.text);
 b.action();
-hideOverlay();
+if(b.closeOverlay!==false)hideOverlay();
 };
 $('sessionButtons').appendChild(btn);
 });
 }
 if(showGoogleBtn){
-console.log('[Session] Adding Google button, googleReady:',googleReady);
-var gb=document.createElement('button');
-gb.className='btn btn-primary';
-gb.style.marginTop='12px';
-gb.style.width='100%';
-gb.style.padding='12px 24px';
-gb.style.fontSize='14px';
-gb.textContent='🔐 Continuar con Google';
-gb.onclick=function(){
-console.log('[Session] Google button clicked');
-if(!googleReady){
-alert('Google no está listo. Espera un momento e intenta de nuevo.');
-return;
+console.log('[Session] Adding Google button');
+var btnArea=document.createElement('div');
+btnArea.style.cssText='margin-top:16px;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;';
+var btn=document.createElement('button');
+btn.className='btn btn-primary';
+btn.style.cssText='width:100%;max-width:300px;padding:14px 24px;font-size:15px;font-weight:600;cursor:pointer;border:none;';
+btn.textContent='Iniciar sesión con Google';
+btn.onclick=function(){
+console.log('[Session] Google sign-in clicked, googleReady:',googleReady);
+if(!googleReady){alert('Google no está listo, espera un momento.');return;}
+try{
+google.accounts.id.prompt(function(n){
+console.log('[Session] Prompt callback - notDisplayed:',n.isNotDisplayed(),'skipped:',n.isSkippedMoment(),'dismissed:',n.isDismissedMoment());
+if(n.isNotDisplayed()){
+google.accounts.id.cancel();
+setTimeout(function(){
+google.accounts.id.prompt(function(n2){
+console.log('[Session] Second prompt - notDisplayed:',n2.isNotDisplayed());
+if(n2.isNotDisplayed()){
+alert('No se pudo abrir Google. Asegúrate de que las ventanas emergentes están permitidas.');
 }
-try{
-console.log('[Session] Calling google.accounts.id.prompt()');
-google.accounts.id.prompt(function(notification){
-console.log('[Session] Prompt callback:',notification);
-if(notification.isNotDisplayed()){
-console.log('[Session] Prompt not displayed, trying renderButton');
-var container=$('googleBtnFallback');
-if(container){
-container.style.display='block';
-try{
-google.accounts.id.renderButton(container,{
-theme:'filled_black',
-size:'large',
-type:'standard',
-text:'signin_with',
-shape:'pill',
-width:300
 });
-console.log('[Session] Button rendered in fallback');
-}catch(e){
-console.error('[Session] renderButton error:',e);
-}
-}
+},500);
 }
 });
 }catch(e){
-console.error('[Session] prompt error:',e);
+console.error('[Session] Google error:',e);
 alert('Error al iniciar Google: '+e.message);
 }
 };
-$('sessionButtons').appendChild(gb);
-var fallback=document.createElement('div');
-fallback.id='googleBtnFallback';
-fallback.style.cssText='display:none;margin-top:12px;';
-$('sessionButtons').appendChild(fallback);
+btnArea.appendChild(btn);
+$('sessionButtons').appendChild(btnArea);
 }
 showOverlay();
 }
@@ -460,17 +446,17 @@ if(!btcAddress){
 console.log('[Session] No BTC address, skipping');
 return;
 }
-setSessionContent(
-'¿Guardar sesión?',
-'¿Quieres guardar tu sesión para la próxima vez?',
-[{text:'Sí',cls:'btn-primary',action:function(){
-console.log('[Session] User clicked Sí, showing Google login');
-setSessionContent('Inicia sesión con Google','Tu dirección BTC se guardará con tu cuenta de Google',[],true);
-}},{text:'No',cls:'btn-secondary',action:function(){
-console.log('[Session] User clicked No');
-}}],
-false
-);
+  setSessionContent(
+    '¿Guardar sesión?',
+    '¿Quieres guardar tu sesión para la próxima vez?',
+    [{text:'Sí',cls:'btn-primary',closeOverlay:false,action:function(){
+      console.log('[Session] User clicked Sí, showing Google login');
+      setSessionContent('Inicia sesión con Google','Tu dirección BTC se guardará con tu cuenta de Google',[],true);
+    }},{text:'No',cls:'btn-secondary',action:function(){
+      console.log('[Session] User clicked No');
+    }}],
+    false
+  );
 }
 
 function restoreSavedSession(session){
@@ -491,7 +477,7 @@ return;
 console.log('[Session] Found session:',session);
 if(session.pending){
 console.log('[Session] Session is pending, asking to save');
-setSessionContent('¿Guardar sesión?','Tu dirección BTC: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){setSessionContent('Inicia sesión con Google','Tu dirección BTC se guardará con tu cuenta de Google',[],true)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false);
+setSessionContent('¿Guardar sesión?','Tu dirección BTC: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',closeOverlay:false,action:function(){setSessionContent('Inicia sesión con Google','Tu dirección BTC se guardará con tu cuenta de Google',[],true)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false);
 }else if(session.name&&session.email){
 console.log('[Session] Complete session found, asking to restore');
 setSessionContent('¿Continuar como '+session.name+'?','Tu dirección BTC: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){restoreSavedSession(session)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false);
