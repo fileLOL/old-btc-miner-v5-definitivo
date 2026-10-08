@@ -300,7 +300,69 @@ setMiningRate(0);
 log('MINING STOPPED')}
 
 if($('start'))$('start').onclick=startMining;
-if($('stop'))$('stop').onclick=stopMining;
+if($('stop'))$('stop').onclick=function(){stopMining();askSaveSession()};
+
+var GOOGLE_CLIENT_ID='46928798077-vtsu6fln277j6s601n2b4feg1hrsfi72.apps.googleusercontent.com';
+var SESSION_KEY='mining_btc_session';
+
+function getSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY))}catch(e){return null}}
+function saveSession(data){try{localStorage.setItem(SESSION_KEY,JSON.stringify(data))}catch(e){}}
+function clearSession(){try{localStorage.removeItem(SESSION_KEY)}catch(e){}}
+
+function showOverlay(){if($('sessionOverlay'))$('sessionOverlay').style.display='flex'}
+function hideOverlay(){if($('sessionOverlay'))$('sessionOverlay').style.display='none';if($('googleBtnContainer'))$('googleBtnContainer').style.display='none'}
+
+function setSessionContent(title,subtitle,buttons,showGoogleBtn){
+if($('sessionTitle'))$('sessionTitle').textContent=title;
+if($('sessionSubtitle'))$('sessionSubtitle').textContent=subtitle;
+if($('sessionButtons')){
+$('sessionButtons').innerHTML='';
+buttons.forEach(function(b){
+var btn=document.createElement('button');
+btn.className='btn '+(b.cls||'btn-secondary');
+btn.textContent=b.text;
+btn.onclick=function(){b.action();hideOverlay()};
+$('sessionButtons').appendChild(btn)})}
+if($('googleBtnContainer')){
+if(showGoogleBtn){
+$('googleBtnContainer').style.display='flex';
+$('googleBtnContainer').innerHTML='';
+if(typeof google!=='undefined'&&google.accounts){
+google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:handleGoogleCredential});
+google.accounts.id.renderButton($('googleBtnContainer'),{theme:'filled_black',size:'medium',type:'standard',text:'signin_with',shape:'pill'})}
+}else{$('googleBtnContainer').style.display='none'}}
+showOverlay()}
+
+function handleGoogleCredential(response){
+try{
+var data=JSON.parse(atob(response.credential.split('.')[1]));
+var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+if(!btcAddress){alert('Introduce tu BTC address antes de guardar la sesión');return}
+saveSession({googleId:data.sub,name:data.name,email:data.email,btcAddress:btcAddress,savedAt:Date.now()});
+log('SESSION SAVED as '+data.name);
+alert('Sesión guardada como '+data.name+'. La próxima vez se restaurará automáticamente.');
+hideOverlay()
+}catch(e){alert('Error al guardar sesión: '+e.message)}}
+
+function askSaveSession(){
+var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+if(!btcAddress)return;
+setSessionContent('¿Guardar sesión?','¿Quieres guardar tu sesión para la próxima vez?',[{text:'Sí',cls:'btn-primary',action:function(){setSessionContent('Inicia sesión con Google','Tu BTC address se guardará con tu cuenta Google',[],true)}},{text:'No',cls:'btn-secondary',action:function(){}}],false)}
+
+function restoreSavedSession(session){
+if($('btcAddress'))$('btcAddress').value=session.btcAddress;
+log('SESSION RESTORED: '+session.name+' ('+session.email+')');
+updateMinerStatusUI('RESTORED');
+connectWS()}
+
+function checkSavedSession(){
+var session=getSession();
+if(!session)return;
+setSessionContent('¿Continuar como '+session.name+'?','Tu BTC address guardada: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){restoreSavedSession(session)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false)}
+
+window.addEventListener('beforeunload',function(e){
+var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+if(btcAddress&&running){askSaveSession()}});
 
 (function initUI(){
 var url=window.BACKEND_URL||'';
@@ -312,6 +374,7 @@ console.warn('BACKEND_URL not configured. Edit frontend/config.js with your Rend
 
 (async function init(){
 log('SYSTEM INIT');
+checkSavedSession();
 var url=window.BACKEND_URL||'';
 if(url.indexOf('YOUR-RENDER')>=0||url.indexOf('REPLACE')>=0){
 log('BACKEND NOT CONFIGURED — EDIT frontend/config.js');
