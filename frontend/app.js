@@ -334,23 +334,22 @@ $('sessionButtons').appendChild(btn)})}
 if($('googleBtnContainer')){
 if(showGoogleBtn){
 $('googleBtnContainer').style.display='flex';
-$('googleBtnContainer').innerHTML='';
+$('googleBtnContainer').innerHTML='<div id="googleSignInBtn"></div>';
+console.log('[Session] Waiting for Google to load...');
+function tryRenderGoogle(){
 if(typeof google!=='undefined'&&google.accounts){
+console.log('[Session] Google loaded, initializing...');
+try{
 google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:handleGoogleCredential});
-google.accounts.id.renderButton($('googleBtnContainer'),{theme:'filled_black',size:'medium',type:'standard',text:'signin_with',shape:'pill'});
+google.accounts.id.renderButton(document.getElementById('googleSignInBtn'),{theme:'filled_black',size:'large',type:'standard',text:'signin_with',shape:'pill',width:280});
 console.log('[Session] Google button rendered');
+}catch(e){console.error('[Session] Google render error:',e)}
 }else{
-console.error('[Session] Google not loaded yet, retrying...');
-setTimeout(function(){
-if(typeof google!=='undefined'&&google.accounts){
-google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:handleGoogleCredential});
-google.accounts.id.renderButton($('googleBtnContainer'),{theme:'filled_black',size:'medium',type:'standard',text:'signin_with',shape:'pill'});
-console.log('[Session] Google button rendered on retry');
-}else{
-console.error('[Session] Google still not loaded');
+console.log('[Session] Google not ready, retrying in 500ms...');
+setTimeout(tryRenderGoogle,500);
 }
-},1000);
 }
+tryRenderGoogle();
 }else{$('googleBtnContainer').style.display='none'}}
 showOverlay()}
 
