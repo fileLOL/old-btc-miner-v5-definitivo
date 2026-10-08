@@ -190,7 +190,7 @@ font-size:11px;color:var(--text-muted)
 .session-overlay{
 position:fixed;top:0;left:0;right:0;bottom:0;
 background:rgba(0,0,0,0.7);
-display:flex;align-items:center;justify-content:center;
+display:none;align-items:center;justify-content:center;
 z-index:9999;backdrop-filter:blur(4px)
 }
 .session-popup{
@@ -204,7 +204,8 @@ font-size:16px;font-weight:600;color:var(--text);
 margin-bottom:8px
 }
 .session-subtitle{
-font-size:13px;color:var(--text-dim);margin-bottom:16px
+font-size:13px;color:var(--text-dim);margin-bottom:16px;
+word-break:break-all
 }
 .session-buttons{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .session-buttons .btn{min-width:80px}
@@ -213,7 +214,7 @@ background:var(--bg-input);color:var(--text-dim);border-color:var(--border)
 }
 .btn-secondary:hover{color:var(--text);border-color:var(--border-light)}
 #googleBtnContainer{
-display:flex;justify-content:center;
+display:none;justify-content:center;
 margin-top:12px;padding-top:12px;
 border-top:1px solid var(--border)
 }

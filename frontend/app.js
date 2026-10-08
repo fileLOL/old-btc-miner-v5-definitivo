@@ -309,7 +309,15 @@ function getSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY))}c
 function saveSession(data){try{localStorage.setItem(SESSION_KEY,JSON.stringify(data))}catch(e){}}
 function clearSession(){try{localStorage.removeItem(SESSION_KEY)}catch(e){}}
 
-function showOverlay(){if($('sessionOverlay'))$('sessionOverlay').style.display='flex'}
+function showOverlay(){
+var el=$('sessionOverlay');
+console.log('[Session] showOverlay called, element:', el);
+if(el){
+el.style.display='flex';
+console.log('[Session] Overlay display set to:', el.style.display);
+}else{
+console.error('[Session] sessionOverlay element not found!')
+}}
 function hideOverlay(){if($('sessionOverlay'))$('sessionOverlay').style.display='none';if($('googleBtnContainer'))$('googleBtnContainer').style.display='none'}
 
 function setSessionContent(title,subtitle,buttons,showGoogleBtn){
