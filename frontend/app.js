@@ -304,6 +304,29 @@ if($('stop'))$('stop').onclick=function(){stopMining();askSaveSession()};
 
 var GOOGLE_CLIENT_ID='46928798077-vtsu6fln277j6s601n2b4feg1hrsfi72.apps.googleusercontent.com';
 var SESSION_KEY='mining_btc_session';
+var googleReady=false;
+var googleTokenClient=null;
+
+function initGoogle(){
+if(typeof google!=='undefined'&&google.accounts){
+console.log('[Session] Google library detected, initializing...');
+try{
+google.accounts.id.initialize({
+client_id:GOOGLE_CLIENT_ID,
+callback:handleGoogleCredential,
+auto_select:false,
+cancel_on_tap_outside:true
+});
+googleReady=true;
+console.log('[Session] Google initialized successfully');
+}catch(e){
+console.error('[Session] Google init error:',e);
+googleReady=false;
+}
+}else{
+console.log('[Session] Google not ready, retrying...');
+setTimeout(initGoogle,300);
+}}
 
 function getSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY))}catch(e){return null}}
 function saveSession(data){try{localStorage.setItem(SESSION_KEY,JSON.stringify(data))}catch(e){}}
@@ -311,16 +334,20 @@ function clearSession(){try{localStorage.removeItem(SESSION_KEY)}catch(e){}}
 
 function showOverlay(){
 var el=$('sessionOverlay');
-console.log('[Session] showOverlay called, element:', el);
 if(el){
 el.style.display='flex';
-console.log('[Session] Overlay display set to:', el.style.display);
+console.log('[Session] Overlay shown');
 }else{
-console.error('[Session] sessionOverlay element not found!')
-}}
-function hideOverlay(){if($('sessionOverlay'))$('sessionOverlay').style.display='none';if($('googleBtnContainer'))$('googleBtnContainer').style.display='none'}
+console.error('[Session] Overlay element not found');
+}
+}
+function hideOverlay(){
+var el=$('sessionOverlay');
+if(el)el.style.display='none';
+}
 
 function setSessionContent(title,subtitle,buttons,showGoogleBtn){
+console.log('[Session] setSessionContent called:',{title,subtitle,buttons:buttons.length,showGoogleBtn});
 if($('sessionTitle'))$('sessionTitle').textContent=title;
 if($('sessionSubtitle'))$('sessionSubtitle').textContent=subtitle;
 if($('sessionButtons')){
@@ -329,63 +356,149 @@ buttons.forEach(function(b){
 var btn=document.createElement('button');
 btn.className='btn '+(b.cls||'btn-secondary');
 btn.textContent=b.text;
-btn.onclick=function(){b.action();hideOverlay()};
-$('sessionButtons').appendChild(btn)})}
-if($('googleBtnContainer')){
+btn.onclick=function(){
+console.log('[Session] Button clicked:',b.text);
+b.action();
+hideOverlay();
+};
+$('sessionButtons').appendChild(btn);
+});
+}
 if(showGoogleBtn){
-$('googleBtnContainer').style.display='flex';
-$('googleBtnContainer').innerHTML='<div id="googleSignInBtn"></div>';
-console.log('[Session] Waiting for Google to load...');
-function tryRenderGoogle(){
-if(typeof google!=='undefined'&&google.accounts){
-console.log('[Session] Google loaded, initializing...');
+console.log('[Session] Adding Google button, googleReady:',googleReady);
+var gb=document.createElement('button');
+gb.className='btn btn-primary';
+gb.style.marginTop='12px';
+gb.style.width='100%';
+gb.style.padding='12px 24px';
+gb.style.fontSize='14px';
+gb.textContent='🔐 Continuar con Google';
+gb.onclick=function(){
+console.log('[Session] Google button clicked');
+if(!googleReady){
+alert('Google no está listo. Espera un momento e intenta de nuevo.');
+return;
+}
 try{
-google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:handleGoogleCredential});
-google.accounts.id.renderButton(document.getElementById('googleSignInBtn'),{theme:'filled_black',size:'large',type:'standard',text:'signin_with',shape:'pill',width:280});
-console.log('[Session] Google button rendered');
-}catch(e){console.error('[Session] Google render error:',e)}
-}else{
-console.log('[Session] Google not ready, retrying in 500ms...');
-setTimeout(tryRenderGoogle,500);
+console.log('[Session] Calling google.accounts.id.prompt()');
+google.accounts.id.prompt(function(notification){
+console.log('[Session] Prompt callback:',notification);
+if(notification.isNotDisplayed()){
+console.log('[Session] Prompt not displayed, trying renderButton');
+var container=$('googleBtnFallback');
+if(container){
+container.style.display='block';
+try{
+google.accounts.id.renderButton(container,{
+theme:'filled_black',
+size:'large',
+type:'standard',
+text:'signin_with',
+shape:'pill',
+width:300
+});
+console.log('[Session] Button rendered in fallback');
+}catch(e){
+console.error('[Session] renderButton error:',e);
 }
 }
-tryRenderGoogle();
-}else{$('googleBtnContainer').style.display='none'}}
-showOverlay()}
+}
+});
+}catch(e){
+console.error('[Session] prompt error:',e);
+alert('Error al iniciar Google: '+e.message);
+}
+};
+$('sessionButtons').appendChild(gb);
+var fallback=document.createElement('div');
+fallback.id='googleBtnFallback';
+fallback.style.cssText='display:none;margin-top:12px;';
+$('sessionButtons').appendChild(fallback);
+}
+showOverlay();
+}
 
 function handleGoogleCredential(response){
+console.log('[Session] Google credential received');
 try{
-var data=JSON.parse(atob(response.credential.split('.')[1]));
+var parts=response.credential.split('.');
+if(parts.length!==3){
+throw new Error('Invalid JWT format');
+}
+var payload=parts[1];
+var base64=payload.replace(/-/g,'+').replace(/_/g,'/');
+while(base64.length%4){base64+='=';}
+var data=JSON.parse(atob(base64));
+console.log('[Session] Google user data:',data);
 var session=getSession();
 var btcAddress=session&&session.btcAddress?session.btcAddress:($('btcAddress')?$('btcAddress').value.trim():'');
-if(!btcAddress){alert('Introduce tu BTC address antes de guardar la sesión');return}
-saveSession({googleId:data.sub,name:data.name,email:data.email,btcAddress:btcAddress,savedAt:Date.now()});
+if(!btcAddress){
+alert('Por favor, introduce tu dirección BTC antes de guardar la sesión.');
+return;
+}
+saveSession({
+googleId:data.sub,
+name:data.name,
+email:data.email,
+btcAddress:btcAddress,
+savedAt:Date.now(),
+pending:false
+});
 log('SESSION SAVED as '+data.name);
-alert('Sesión guardada como '+data.name+'. La próxima vez se restaurará automáticamente.');
-hideOverlay()
-}catch(e){alert('Error al guardar sesión: '+e.message)}}
+alert('✓ Sesión guardada como '+data.name+'\n\nLa próxima vez se restaurará automáticamente.');
+hideOverlay();
+}catch(e){
+console.error('[Session] handleGoogleCredential error:',e);
+alert('Error al procesar la sesión: '+e.message);
+}
+}
 
 function askSaveSession(){
 var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
-if(!btcAddress)return;
-setSessionContent('¿Guardar sesión?','¿Quieres guardar tu sesión para la próxima vez?',[{text:'Sí',cls:'btn-primary',action:function(){setSessionContent('Inicia sesión con Google','Tu BTC address se guardará con tu cuenta Google',[],true)}},{text:'No',cls:'btn-secondary',action:function(){}}],false)}
+console.log('[Session] askSaveSession called, btcAddress:',btcAddress);
+if(!btcAddress){
+console.log('[Session] No BTC address, skipping');
+return;
+}
+setSessionContent(
+'¿Guardar sesión?',
+'¿Quieres guardar tu sesión para la próxima vez?',
+[{text:'Sí',cls:'btn-primary',action:function(){
+console.log('[Session] User clicked Sí, showing Google login');
+setSessionContent('Inicia sesión con Google','Tu dirección BTC se guardará con tu cuenta de Google',[],true);
+}},{text:'No',cls:'btn-secondary',action:function(){
+console.log('[Session] User clicked No');
+}}],
+false
+);
+}
 
 function restoreSavedSession(session){
+console.log('[Session] Restoring session for:',session.name);
 if($('btcAddress'))$('btcAddress').value=session.btcAddress;
 log('SESSION RESTORED: '+session.name+' ('+session.email+')');
 updateMinerStatusUI('RESTORED');
-connectWS()}
+connectWS();
+}
 
 function checkSavedSession(){
+console.log('[Session] Checking saved session...');
 var session=getSession();
-console.log('[Session] Checking saved session:', session);
-if(!session){console.log('[Session] No saved session');return;}
+if(!session){
+console.log('[Session] No saved session found');
+return;
+}
+console.log('[Session] Found session:',session);
 if(session.pending){
-console.log('[Session] Pending session found, showing save popup');
-setSessionContent('¿Guardar sesión?','Tu BTC address: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){setSessionContent('Inicia sesión con Google','Tu BTC address se guardará con tu cuenta Google',[{text:'Cancelar',cls:'btn-secondary',action:function(){clearSession()}}],true)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false)}else if(session.name&&session.email){
-console.log('[Session] Complete session found, showing restore popup');
-setSessionContent('¿Continuar como '+session.name+'?','Tu BTC address guardada: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){restoreSavedSession(session)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false)}else{
-console.log('[Session] Session exists but incomplete:', session)}}
+console.log('[Session] Session is pending, asking to save');
+setSessionContent('¿Guardar sesión?','Tu dirección BTC: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){setSessionContent('Inicia sesión con Google','Tu dirección BTC se guardará con tu cuenta de Google',[],true)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false);
+}else if(session.name&&session.email){
+console.log('[Session] Complete session found, asking to restore');
+setSessionContent('¿Continuar como '+session.name+'?','Tu dirección BTC: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){restoreSavedSession(session)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false);
+}else{
+console.log('[Session] Incomplete session, ignoring');
+}
+}
 
 if($('btcAddress')){
 $('btcAddress').addEventListener('input',function(){
@@ -393,8 +506,20 @@ var btcAddress=$('btcAddress').value.trim();
 var existingSession=getSession();
 if(btcAddress.length>20&&(!existingSession||existingSession.pending)){
 saveSession({pending:true,btcAddress:btcAddress,savedAt:Date.now()});
-console.log('[Session] BTC address auto-saved:', btcAddress.substring(0,10)+'...')
-}})}
+console.log('[Session] BTC address auto-saved:',btcAddress.substring(0,10)+'...');
+}
+});
+}
+
+console.log('[Session] Initializing Google...');
+if(typeof google!=='undefined'&&google.accounts){
+initGoogle();
+}else{
+window.addEventListener('load',function(){
+console.log('[Session] Window loaded, initializing Google...');
+initGoogle();
+});
+}
 
 (function initUI(){
 var url=window.BACKEND_URL||'';
