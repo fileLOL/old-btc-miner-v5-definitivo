@@ -4,8 +4,8 @@ var ws=null,minerId=null,workers=[],running=false;
 var jobId=null,jobHeight=0,currentJob=null;
 var myShares=0,rejectedCount=0;
 var exhausted=0,total=0,lastRate=performance.now(),hashes=0;
-var refreshTimer=null,statusTimer=null;
-var wsRetries=0,wsMaxRetries=5,wsReconnectTimer=null;
+var refreshTimer=null,statusTimer=null,wsHeartbeatTimer=null;
+var wsRetries=0,wsMaxRetries=0,wsReconnectTimer=null,wsBaseDelay=3000,wsMaxDelay=60000;
 
 function getBackendHttp(){
 var u=window.BACKEND_URL||'';
@@ -54,7 +54,7 @@ else if(text.indexOf('ERROR')>=0||text.indexOf('OFFLINE')>=0)el.classList.add('s
 function setMiningRate(h){if($('minerHashrate'))$('minerHashrate').textContent=fmtRate(h)}
 
 async function getJSON(url,opt){
-var r=await fetch(url,Object.assign({mode:'cors',signal:AbortSignal.timeout(10000)},opt||{}));
+var r=await fetch(url,Object.assign({mode:'cors',signal:AbortSignal.timeout(60000)},opt||{}));
 var d={};try{d=await r.json()}catch(e){}
 if(!r.ok||d.ok===false)throw Error(d.error||'HTTP '+r.status);
 return d}
@@ -97,8 +97,11 @@ if($('network'))$('network').textContent=(s.chain||'mainnet').toUpperCase();
 if($('networkLabel'))$('networkLabel').textContent=(s.chain||'mainnet').toUpperCase();
 if($('bitcoinNetwork'))$('bitcoinNetwork').textContent=(s.chain||'mainnet').toUpperCase();
 if($('blocks'))$('blocks').textContent=(s.blocks||0).toLocaleString();
+if($('blocks2'))$('blocks2').textContent=(s.blocks||0).toLocaleString();
 if($('difficulty'))$('difficulty').textContent=Number(s.difficulty||0).toLocaleString(undefined,{maximumFractionDigits:2});
+if($('difficulty2'))$('difficulty2').textContent=Number(s.difficulty||0).toLocaleString(undefined,{maximumFractionDigits:2});
 if($('hashrate'))$('hashrate').textContent=Number(s.networkhashps||0).toLocaleString(undefined,{maximumFractionDigits:0})+' H/s';
+if($('hashrate2'))$('hashrate2').textContent=Number(s.networkhashps||0).toLocaleString(undefined,{maximumFractionDigits:0})+' H/s';
 if($('bitcoinCore')){$('bitcoinCore').textContent='CONNECTED';$('bitcoinCore').style.color='var(--green)'}
 if(s.verificationprogress&&s.verificationprogress<0.9999){
 log('NODE OK // '+s.chain.toUpperCase()+' // HEIGHT '+s.blocks+' // SYNC '+(s.verificationprogress*100).toFixed(2)+'%')}
@@ -115,11 +118,15 @@ if(!base)return null;
 try{
 var t=await getJSON(base+'/api/template');
 if($('tHeight'))$('tHeight').textContent=t.height;
+if($('tHeight2'))$('tHeight2').textContent=t.height;
 if($('templateHeight'))$('templateHeight').textContent=t.height;
 if($('prev'))$('prev').textContent=truncate(t.previousblockhash,16);
+if($('prev2'))$('prev2').textContent=truncate(t.previousblockhash,16);
 if($('bits'))$('bits').textContent=t.bits;
 if($('target'))$('target').textContent=truncate(t.target,16);
+if($('target2'))$('target2').textContent=truncate(t.target,16);
 if($('txcount'))$('txcount').textContent=t.transactions;
+if($('txcount2'))$('txcount2').textContent=t.transactions;
 if($('coinbase'))$('coinbase').textContent=(Number(t.coinbasevalue)/1e8).toFixed(8)+' BTC';
 log('TEMPLATE '+t.height+' LOADED // '+t.transactions+' TX // '+truncate(t.previousblockhash,16));
 return t}catch(e){
@@ -143,9 +150,12 @@ coinbasevalue:j.coinbasevalue||null
 };
 if($('templateHeight'))$('templateHeight').textContent=j.height;
 if($('tHeight'))$('tHeight').textContent=j.height;
+if($('tHeight2'))$('tHeight2').textContent=j.height;
 if(j.bits&&$('bits'))$('bits').textContent=j.bits;
 if(j.previousblockhash&&$('prev'))$('prev').textContent=truncate(j.previousblockhash,16);
+if(j.previousblockhash&&$('prev2'))$('prev2').textContent=truncate(j.previousblockhash,16);
 if(j.blockTarget&&$('target'))$('target').textContent=truncate(j.blockTarget.map(function(b){return(b<16?'0':'')+b.toString(16)}).join(''),16);
+if(j.blockTarget&&$('target2'))$('target2').textContent=truncate(j.blockTarget.map(function(b){return(b<16?'0':'')+b.toString(16)}).join(''),16);
 if(j.coinbasevalue&&$('coinbase'))$('coinbase').textContent=fmtBtc(j.coinbasevalue)}
 
 function stopWorkers(){
@@ -190,26 +200,44 @@ log('MINING // '+n+' WORKERS // HEIGHT '+jobHeight)}
 
 function scheduleWsReconnect(){
 if(wsReconnectTimer)return;
-if(wsRetries>=wsMaxRetries){
-log('WS GAVE UP AFTER '+wsMaxRetries+' ATTEMPTS // CHECK BACKEND');
-updateNodePanel('DISCONNECTED');
-return}
 wsRetries++;
-var delay=Math.min(5000*wsRetries,30000);
-log('WS RECONNECTING ('+wsRetries+'/'+wsMaxRetries+') IN '+(delay/1000)+'s...');
+var delay=Math.min(wsBaseDelay*Math.pow(2,wsRetries-1),wsMaxDelay);
+delay+=Math.random()*1000;
+log('WS RECONNECTING (attempt '+wsRetries+') IN '+(delay/1000).toFixed(1)+'s...');
 wsReconnectTimer=setTimeout(function(){
 wsReconnectTimer=null;
 connectWS()},delay)}
+
+window.addEventListener('visibilitychange',function(){
+if(!document.hidden&&(!ws||ws.readyState!==1)){
+log('PAGE VISIBLE - RECONNECTING...');
+wsRetries=0;
+if(wsReconnectTimer){clearTimeout(wsReconnectTimer);wsReconnectTimer=null}
+connectWS()}});
+
+window.addEventListener('online',function(){
+log('NETWORK ONLINE - RECONNECTING...');
+wsRetries=0;
+if(wsReconnectTimer){clearTimeout(wsReconnectTimer);wsReconnectTimer=null}
+connectWS()});
+
+window.addEventListener('offline',function(){
+log('NETWORK OFFLINE');
+if(wsReconnectTimer){clearTimeout(wsReconnectTimer);wsReconnectTimer=null}});
 
 function connectWS(){
 var wsUrl=window.BACKEND_URL||'';
 if(!wsUrl){log('BACKEND_URL NOT CONFIGURED');return}
 if(ws&&ws.readyState<=1){return}
+if(wsHeartbeatTimer){clearInterval(wsHeartbeatTimer);wsHeartbeatTimer=null}
 try{ws=new WebSocket(wsUrl+'/ws')}catch(e){log('WS FAILED: '+e.message);scheduleWsReconnect();return}
 ws.onopen=function(){
 log('WEBSOCKET CONNECTED');
 updateNodePanel('CONNECTED');
 wsRetries=0;
+wsHeartbeatTimer=setInterval(function(){
+if(ws&&ws.readyState===1){try{ws.send(JSON.stringify({type:'ping'}))}catch(e){}}
+},30000);
 var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
 if(!btcAddress){log('BTC ADDRESS REQUIRED FOR MINING');return}
 try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress}));log('REGISTERING...')}catch(e){log('REGISTER FAILED: '+e.message)}};
@@ -227,8 +255,10 @@ else if(msg.type==='poolStats'){updatePoolUI(msg)}
 else if(msg.type==='blockFound'){log('BLOCK FOUND BY '+msg.minerId+' AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK FOUND!')}
 else if(msg.type==='blockAccepted'){log('BLOCK ACCEPTED AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK ACCEPTED!')}
 else if(msg.type==='blockRejected'){log('BLOCK REJECTED: '+msg.reason)}
+else if(msg.type==='pong'){}
 else if(msg.type==='error'){log('ERROR: '+msg.error)}};
 ws.onclose=function(){
+if(wsHeartbeatTimer){clearInterval(wsHeartbeatTimer);wsHeartbeatTimer=null}
 log('WS DISCONNECTED');
 ws=null;
 updateNodePanel('DISCONNECTED');

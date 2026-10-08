@@ -16,6 +16,7 @@ const PayoutProcessor=require('./lib/payout-processor');
 const PayoutMonitor=require('./lib/payout-monitor');
 const AuditLog=require('./lib/audit');
 const TestPayoutRunner=require('./lib/test-payout-runner');
+const StratumServer=require('./lib/stratum-server');
 
 const app=express();
 const server=http.createServer(app);
@@ -31,7 +32,7 @@ if(req.method==='OPTIONS')return res.sendStatus(200);
 next()});
 
 app.use(express.json({limit:'16mb'}));
-app.use(express.static(path.join(__dirname,'public')));
+app.use(express.static(path.join(__dirname,'frontend')));
 
 let db;
 try{db=getDb()}catch(e){console.error('Database init error:',e.message)}
@@ -45,6 +46,7 @@ const blockMonitor=new BlockMonitor(config,btcCli);
 const payoutProcessor=new PayoutProcessor(config,btcCli);
 const payoutMonitor=new PayoutMonitor(config,btcCli);
 const testPayoutRunner=new TestPayoutRunner(config,btcCli);
+const stratumServer=new StratumServer(config,jobManager,minerTracker,accountManager);
 
 function calculateBlockHash(blockHex){
 const headerBuf=Buffer.from(blockHex.slice(0,160),'hex');
@@ -374,7 +376,11 @@ handleBlockCandidate(ws,minerId,result.jobId,result.nonce)}}
 
 else if(msg.type==='hashrate'){
 if(typeof msg.hashes==='number'&&msg.hashes>0){
-minerTracker.updateHashrate(minerId,msg.hashes)}}}
+minerTracker.updateHashrate(minerId,msg.hashes)}}
+
+else if(msg.type==='ping'){
+try{ws.send(JSON.stringify({type:'pong'}))}catch(e){}}
+}
 
 async function handleBlockCandidate(ws,minerId,jobId,nonce){
 try{
@@ -413,9 +419,11 @@ templateInterval=setInterval(refreshTemplate,config.TEMPLATE_REFRESH_MS)}
 server.listen(PORT,'0.0.0.0',async()=>{
 console.log(`OLD BTC MINER V5 POOL -> http://0.0.0.0:${PORT}`);
 console.log(`WebSocket: ws://0.0.0.0:${PORT}/ws`);
+console.log(`Stratum: stratum+tcp://0.0.0.0:${config.STRATUM_PORT}`);
 console.log(`Payout address: ${config.PAYOUT_ADDRESS?'[CONFIGURED]':'[NOT SET - edit .env]'}`);
 console.log(`Pool fee: ${config.POOL_FEE_PERCENT}% | PPLNS window: ${config.PPLNS_WINDOW_SIZE} | Min payout: ${config.MIN_PAYOUT_SAT} sat`);
 console.log(`Payout mode: ${config.PAYOUT_DRY_RUN?'DRY RUN (no real payments)':'LIVE (real payments enabled)'}`);
+if(config.POOL_PUBLIC_HOST){console.log(`Public: stratum+tcp://${config.POOL_PUBLIC_HOST}:${config.STRATUM_PORT}`)}
 
 try{
 console.log('[Startup] Checking for stale pending payouts...');
@@ -430,6 +438,7 @@ startTemplateRefresh();
 startBroadcastLoop();
 blockMonitor.start();
 payoutMonitor.start();
+stratumServer.start();
 
 const payoutInterval=setInterval(async()=>{
 try{
@@ -447,6 +456,7 @@ console.log('Shutting down...');
 clearInterval(templateInterval);
 clearInterval(broadcastInterval);
 clearInterval(payoutInterval);
+stratumServer.stop();
 minerTracker.destroy();
 rateLimiter.destroy();
 blockMonitor.stop();
@@ -458,4 +468,4 @@ server.close();
 try{closeDb()}catch{}
 process.exit(0)});
 
-module.exports={app,server,jobManager,shareValidator,minerTracker,rateLimiter,btcCli,config};
+module.exports={app,server,jobManager,shareValidator,minerTracker,rateLimiter,btcCli,config,stratumServer};

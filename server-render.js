@@ -586,6 +586,10 @@ function handleMessage(ws, minerId, msg) {
       minerTracker.updateHashrate(minerId, msg.hashes)
     }
   }
+
+  else if (msg.type === 'ping') {
+    try { ws.send(JSON.stringify({ type: 'pong' })) } catch (e) {}
+  }
 }
 
 async function handleBlockCandidate(ws, minerId, jobId, nonce) {

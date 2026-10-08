@@ -1,80 +1,178 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OLD BTC MINER // MAINNET // V5 POOL</title>
+<title>Mining BTC</title>
 <link rel="stylesheet" href="/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="/config.js"></script>
 </head>
 <body>
-<main class="crt">
-<header class="topbar"><div class="brand">&#x20bf; OLD BTC MINER V5</div><div class="status"><span id="led"></span> <span id="statusText">OFFLINE</span></div><div class="clock" id="clock">--:--:--</div></header>
-<section class="grid">
-<article class="panel hero">
-<div class="panel-title">[ MINING CONSOLE ]</div><div class="big-btc">&#x20bf;</div>
-<div class="metric"><span>NETWORK</span><b id="network">UNKNOWN</b></div>
-<div class="metric"><span>BLOCK HEIGHT</span><b id="blocks">---</b></div>
-<div class="metric"><span>DIFFICULTY</span><b id="difficulty">---</b></div>
-<div class="metric"><span>NETWORK HASHRATE</span><b id="hashrate">---</b></div>
-<div class="buttons"><button id="refresh">[ REFRESH NODE ]</button><button id="template">[ GET BLOCK TEMPLATE ]</button></div>
-</article>
-<article class="panel wallet-panel">
-<div class="panel-title">[ WALLET ]</div>
-<div class="metric"><span>STATUS</span><b id="walletStatus">NOT REGISTERED</b></div>
-<div class="metric"><span>ADDRESS</span><b id="walletAddress">---</b></div>
-<div class="metric"><span>TYPE</span><b id="walletType">---</b></div>
-<div class="wallet-input-row">
-<input type="text" id="walletInput" placeholder="bc1q... / 1... / 3..." maxlength="62" autocomplete="off" spellcheck="false">
-<button id="registerWallet">[ VINCULAR WALLET ]</button>
+
+<div class="app">
+
+<header class="header">
+<div class="header-brand">
+<svg class="btc-icon" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15" fill="#f7931a"/><path d="M21.2 13.6c.3-2-1.2-3.1-3.3-3.8l.7-2.7-1.6-.4-.7 2.6c-.4-.1-.9-.2-1.3-.3l.7-2.7-1.6-.4-.7 2.7c-.4-.1-.7-.2-1.1-.3l0 0-2.2-.6-.4 1.7s1.2.3 1.2.3c.6.2.8.6.7 1l-.7 2.9c0 0 .1 0 .1.1h-.1l-1 4c-.1.2-.3.6-.8.4 0 0-1.2-.3-1.2-.3l-.8 1.8 2.1.5c.4.1.8.2 1.1.3l-.7 2.8 1.6.4.7-2.7c.5.1.9.2 1.3.3l-.7 2.7 1.6.4.7-2.8c2.9.5 5 .3 5.9-2.3.7-2.1 0-3.3-1.5-4.1 1.1-.2 1.9-.9 2.1-2.3zm-3.8 5.3c-.5 2.1-4 1-5.1.7l.9-3.7c1.1.3 4.7.8 4.2 3zm.5-5.3c-.5 1.9-3.4.9-4.3.7l.8-3.3c1 .2 4.1.7 3.5 2.6z" fill="#fff"/></svg>
+<span class="header-title">Mining BTC</span>
 </div>
-<p class="note">INTRODUCE SOLO TU DIRECCION PUBLICA BITCOIN (MAINNET). NUNCA INTRODUCES CLAVES PRIVADAS NI SEMILLAS.</p>
-<div id="walletError" class="wallet-error"></div>
-</article>
-<article class="panel dashboard-panel">
-<div class="panel-title">[ MI DASHBOARD ]</div>
-<div class="metric"><span>SHARES TOTAL</span><b id="dashTotalShares">0</b></div>
-<div class="metric"><span>SHARES PPLNS WINDOW</span><b id="dashWindowShares">0</b></div>
-<div class="metric"><span>BLOCKS FOUND</span><b id="dashBlocksFound">0</b></div>
-<div class="metric"><span>BALANCE PENDING</span><b id="dashPendingSat">0 sat</b></div>
-<div class="metric"><span>BALANCE CONFIRMED</span><b id="dashConfirmedSat">0 sat</b></div>
-<div class="metric"><span>TOTAL EARNED</span><b id="dashTotalEarned">0 sat</b></div>
-<div class="metric"><span>PENDING BTC</span><b id="dashPendingBtc">0.00000000</b></div>
-<div class="metric"><span>CONFIRMED BTC</span><b id="dashConfirmedBtc">0.00000000</b></div>
-</article>
-<article class="panel">
-<div class="panel-title">[ MINER ]</div>
-<div class="ascii">+------------------+<br>|  SHA-256 ENGINE  |<br>|  POOL / MAINNET  |<br>+------------------+</div>
-<div class="metric"><span>MODE</span><b>CPU / BROWSER</b></div>
-<div class="metric"><span>STATUS</span><b id="minerStatus">IDLE</b></div>
-<div class="metric"><span>WORKERS</span><b id="workerCount">0</b></div>
-<div class="metric"><span>MY HASHRATE</span><b id="minerHashrate">0 H/s</b></div>
-<div class="metric"><span>CURRENT JOB</span><b id="templateHeight">---</b></div>
-<p class="note">&#x26a0; CPU MINING - KEEP THIS TAB OPEN. Browser throttles background tabs, reducing hashrate.</p>
-<div class="buttons"><button id="start">[ START MINING ]</button><button id="stop">[ STOP ]</button></div>
-<div id="log" class="log">SYSTEM READY...</div>
-</article>
-<article class="panel pool">
-<div class="panel-title">[ POOL STATS ]</div>
-<div class="metric"><span>MINERS ONLINE</span><b id="minersOnline">0</b></div>
-<div class="metric"><span>POOL HASHRATE</span><b id="poolHashrate">0 H/s</b></div>
-<div class="metric"><span>MY SHARES (SESSION)</span><b id="myShares">0</b></div>
-<div class="metric"><span>TOTAL SHARES</span><b id="totalShares">0</b></div>
-<div class="metric"><span>VALID BLOCKS</span><b id="validBlocks">0</b></div>
-<div class="metric"><span>REWARD</span><b id="lastReward">0 BTC</b></div>
-<div class="metric"><span>SERVER WALLET</span><b id="wallet">SERVER-SIDE</b></div>
-<div class="metric"><span>SERVER BALANCE</span><b id="balance">N/A</b></div>
-</article>
-<article class="panel info">
-<div class="panel-title">[ BLOCK TEMPLATE ]</div>
-<div class="row"><span>HEIGHT</span><b id="tHeight">---</b></div>
-<div class="row"><span>PREVIOUS</span><b id="prev">---</b></div>
-<div class="row"><span>BITS</span><b id="bits">---</b></div>
-<div class="row"><span>TARGET</span><b id="target">---</b></div>
-<div class="row"><span>TX COUNT</span><b id="txcount">---</b></div>
-<div class="row"><span>COINBASE VALUE</span><b id="coinbase">---</b></div>
-<div class="warning">&#x26a0; REAL MAINNET MINING. REWARD ONLY IF BLOCK ACCEPTED BY BITCOIN CORE.</div>
-</article>
-</section>
-<footer>OLD BTC MINER v5.1 // POOL MODE // MAINNET // NO PRIVATE KEYS IN BROWSER</footer>
-</main><script src="/app.js"></script>
-</body></html>
+<div class="header-status">
+<span class="status-badge" id="networkLabel">MAINNET</span>
+<span class="status-indicator">
+<span class="status-dot" id="led"></span>
+<span class="status-text" id="statusText">OFFLINE</span>
+</span>
+<span class="clock" id="clock">--:--:--</span>
+</div>
+</header>
+
+<main class="main">
+
+<div class="stats-row">
+<div class="stat-card">
+<div class="stat-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+</div>
+<div class="stat-info">
+<span class="stat-label">Precio BTC</span>
+<span class="stat-value highlight" id="blocks">---</span>
+<span class="stat-change positive">+2.34%</span>
+</div>
+<div class="stat-chart"><svg viewBox="0 0 80 30"><polyline points="0,25 15,20 30,22 45,12 60,15 80,5" fill="none" stroke="#22c55e" stroke-width="2"/></svg></div>
+</div>
+<div class="stat-card">
+<div class="stat-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+</div>
+<div class="stat-info">
+<span class="stat-label">Último bloque</span>
+<span class="stat-value" id="difficulty">---</span>
+<span class="stat-sub" id="prev">hace -- minutos</span>
+</div>
+</div>
+<div class="stat-card">
+<div class="stat-icon">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+</div>
+<div class="stat-info">
+<span class="stat-label">Hashrate de la red</span>
+<span class="stat-value" id="hashrate">---</span>
+<span class="stat-change positive">+1.8%</span>
+</div>
+<div class="stat-chart"><svg viewBox="0 0 80 30"><polyline points="0,20 20,18 40,15 55,17 80,8" fill="none" stroke="#22c55e" stroke-width="2"/></svg></div>
+</div>
+</div>
+
+<div class="grid-row">
+
+<div class="left-col">
+
+<div class="section-label">Red</div>
+<div class="card-row">
+<div class="info-card">
+<span class="info-label">BLOCKCHAIN</span>
+<div class="info-grid">
+<div class="info-item"><span class="info-item-label">Altura</span><span class="info-item-value highlight" id="blocks2">---</span></div>
+<div class="info-item"><span class="info-item-label">Red</span><span class="info-item-value" id="network">---</span></div>
+<div class="info-item"><span class="info-item-label">Dificultad</span><span class="info-item-value mono" id="difficulty2">---</span></div>
+<div class="info-item"><span class="info-item-label">Hashrate</span><span class="info-item-value mono" id="hashrate2">---</span></div>
+</div>
+</div>
+<div class="info-card">
+<span class="info-label">NODE</span>
+<div class="info-grid">
+<div class="info-item"><span class="info-item-label">Conexión</span><span class="info-item-value" id="nodeConnection">WebSocket: DISCONNECTED</span></div>
+<div class="info-item"><span class="info-item-label">Backend</span><span class="info-item-value mono small" id="backendUrl">UNKNOWN</span></div>
+<div class="info-item"><span class="info-item-label">Bitcoin</span><span class="info-item-value" id="bitcoinNetwork">UNKNOWN</span></div>
+<div class="info-item"><span class="info-item-label">Bitcoin Core</span><span class="info-item-value" id="bitcoinCore">UNKNOWN</span></div>
+</div>
+</div>
+</div>
+
+<div class="section-label">Bloque Actual</div>
+<div class="info-card">
+<span class="info-label">CURRENT JOB</span>
+<div class="info-grid">
+<div class="info-item"><span class="info-item-label">Altura</span><span class="info-item-value mono" id="tHeight2">---</span></div>
+<div class="info-item"><span class="info-item-label">Bloque anterior</span><span class="info-item-value mono truncate" id="prev2">---</span></div>
+<div class="info-item"><span class="info-item-label">Bits</span><span class="info-item-value mono" id="bits">---</span></div>
+<div class="info-item"><span class="info-item-label">Target</span><span class="info-item-value mono truncate" id="target2">---</span></div>
+<div class="info-item"><span class="info-item-label">Transacciones</span><span class="info-item-value" id="txcount2">---</span></div>
+<div class="info-item"><span class="info-item-label">Coinbase</span><span class="info-item-value mono" id="coinbase">---</span></div>
+</div>
+</div>
+
+</div>
+
+<div class="right-col">
+
+<div class="section-label">Minería</div>
+<div class="info-card">
+<span class="info-label">MINING</span>
+<div class="info-grid">
+<div class="info-item"><span class="info-item-label">Estado</span><span class="info-item-value status-mining" id="minerStatus">IDLE</span></div>
+<div class="info-item"><span class="info-item-label">Workers</span><span class="info-item-value" id="workerCount">0</span></div>
+<div class="info-item"><span class="info-item-label">Mi Hashrate</span><span class="info-item-value highlight" id="minerHashrate">0 H/s</span></div>
+<div class="info-item"><span class="info-item-label">Trabajo actual</span><span class="info-item-value mono" id="templateHeight">---</span></div>
+<div class="info-item"><span class="info-item-label">Shares aceptados</span><span class="info-item-value accepted" id="myShares">0</span></div>
+<div class="info-item"><span class="info-item-label">Shares rechazados</span><span class="info-item-value rejected" id="rejectedShares">0</span></div>
+</div>
+</div>
+
+<div class="info-card">
+<span class="info-label">POOL</span>
+<div class="info-grid">
+<div class="info-item"><span class="info-item-label">Mineros online</span><span class="info-item-value" id="minersOnline">0</span></div>
+<div class="info-item"><span class="info-item-label">Pool Hashrate</span><span class="info-item-value mono" id="poolHashrate">0 H/s</span></div>
+<div class="info-item"><span class="info-item-label">Bloques válidos</span><span class="info-item-value highlight" id="validBlocks">0</span></div>
+<div class="info-item"><span class="info-item-label">Recompensa</span><span class="info-item-value" id="lastReward">0 BTC</span></div>
+</div>
+</div>
+
+<div class="mining-card">
+<div class="wallet-row">
+<label class="wallet-label" for="btcAddress">Dirección BTC</label>
+<div class="wallet-input-wrap">
+<input type="text" id="btcAddress" placeholder="bc1q..." class="wallet-input" autocomplete="off" spellcheck="false" aria-label="Bitcoin wallet address">
+</div>
+</div>
+<div class="controls">
+<button id="start" class="btn btn-primary" aria-label="Start mining">Iniciar Minería</button>
+<button id="stop" class="btn btn-stop" aria-label="Stop mining">Detener</button>
+</div>
+</div>
+
+</div>
+
+</div>
+
+<div class="table-card">
+<div class="table-header">Bloques recientes</div>
+<div class="table-wrap">
+<table class="data-table">
+<thead>
+<tr><th>Altura</th><th>Hash (parcial)</th><th>Transacciones</th><th>Tamaño</th><th>Tiempo</th></tr>
+</thead>
+<tbody id="blocksTableBody">
+<tr><td id="tHeight">---</td><td class="mono truncate" id="target">---</td><td id="txcount">---</td><td>---</td><td>---</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div class="log-card">
+<div class="log-title">Log del sistema</div>
+<div class="log-terminal" id="log" role="log" aria-live="polite">&gt; SYSTEM READY</div>
+</div>
+
+</main>
+
+</div>
+
+<script src="/sha256d.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
