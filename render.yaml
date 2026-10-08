@@ -18,7 +18,7 @@ services:
       - key: PAYOUT_ADDRESS
         sync: false
       - key: SHARE_DIFFICULTY
-        value: "7000000000000000"
+        value: "10000000"
       - key: CORS_ORIGIN
         value: "*"
       - key: MAX_MINERS
@@ -50,7 +50,9 @@ services:
       - key: STRATUM_POOL_HOST
         value: "btc.f2pool.com"
       - key: STRATUM_POOL_PORT
-        value: "1314"
+        value: "3333"
+      - key: STRATUM_USE_TLS
+        value: "false"
       - key: STRATUM_WORKER_NAME
         value: "render-worker"
       - key: STRATUM_WORKER_PASSWORD
