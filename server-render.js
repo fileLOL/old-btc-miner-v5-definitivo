@@ -184,16 +184,16 @@ app.get('/api/status', async (_q, r) => {
       chain: chainInfo.chain,
       blocks: chainInfo.blocks,
       headers: chainInfo.headers,
-      verificationProgress: chainInfo.verificationprogress,
+      verificationprogress: chainInfo.verificationprogress,
       difficulty: miningInfo.difficulty,
-      networkHashps: miningInfo.networkhashps,
+      networkhashps: miningInfo.networkhashps,
       warnings: miningInfo.warnings || '',
       bitcoin_core: stratumConnected ? 'online' : 'offline',
       source: stratumConnected ? 'stratum-pool' : 'mempool-space',
       pool: stratumClient ? stratumClient.getStatus() : null
     })
   } catch (e) {
-    r.json({ ok: false, bitcoin_core: 'offline', error: 'Mempool API unreachable', blocks: 0, headers: 0, chain: 'unknown', difficulty: 0, networkhashps: 0, verificationProgress: 0 })
+    r.json({ ok: false, bitcoin_core: 'offline', error: 'Mempool API unreachable', blocks: 0, headers: 0, chain: 'unknown', difficulty: 0, networkhashps: 0, verificationprogress: 0 })
   }
 });
 

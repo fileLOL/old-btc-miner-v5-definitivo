@@ -337,7 +337,20 @@ $('googleBtnContainer').style.display='flex';
 $('googleBtnContainer').innerHTML='';
 if(typeof google!=='undefined'&&google.accounts){
 google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:handleGoogleCredential});
-google.accounts.id.renderButton($('googleBtnContainer'),{theme:'filled_black',size:'medium',type:'standard',text:'signin_with',shape:'pill'})}
+google.accounts.id.renderButton($('googleBtnContainer'),{theme:'filled_black',size:'medium',type:'standard',text:'signin_with',shape:'pill'});
+console.log('[Session] Google button rendered');
+}else{
+console.error('[Session] Google not loaded yet, retrying...');
+setTimeout(function(){
+if(typeof google!=='undefined'&&google.accounts){
+google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:handleGoogleCredential});
+google.accounts.id.renderButton($('googleBtnContainer'),{theme:'filled_black',size:'medium',type:'standard',text:'signin_with',shape:'pill'});
+console.log('[Session] Google button rendered on retry');
+}else{
+console.error('[Session] Google still not loaded');
+}
+},1000);
+}
 }else{$('googleBtnContainer').style.display='none'}}
 showOverlay()}
 
