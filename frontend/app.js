@@ -363,13 +363,23 @@ if(session.pending){
 setSessionContent('¿Guardar sesión?','Tu BTC address: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){setSessionContent('Inicia sesión con Google','Tu BTC address se guardará con tu cuenta Google',[{text:'Cancelar',cls:'btn-secondary',action:function(){clearSession()}}],true)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false)}else if(session.name&&session.email){
 setSessionContent('¿Continuar como '+session.name+'?','Tu BTC address guardada: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){restoreSavedSession(session)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false)}}
 
-window.addEventListener('beforeunload',function(e){
-var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+if($('btcAddress')){
+$('btcAddress').addEventListener('input',function(){
+var btcAddress=$('btcAddress').value.trim();
 var existingSession=getSession();
-if(btcAddress&&(!existingSession||existingSession.pending)){
+if(btcAddress.length>20&&(!existingSession||existingSession.pending)){
 saveSession({pending:true,btcAddress:btcAddress,savedAt:Date.now()});
-log('BTC ADDRESS SAVED PENDING')
-}});
+log('BTC ADDRESS AUTO-SAVED')
+}})}
+
+if($('btcAddress')){
+$('btcAddress').addEventListener('input',function(){
+var btcAddress=$('btcAddress').value.trim();
+var existingSession=getSession();
+if(btcAddress.length>20&&(!existingSession||existingSession.pending)){
+saveSession({pending:true,btcAddress:btcAddress,savedAt:Date.now()});
+log('BTC ADDRESS AUTO-SAVED')
+}})}
 
 (function initUI(){
 var url=window.BACKEND_URL||'';
