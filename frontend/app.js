@@ -358,10 +358,14 @@ connectWS()}
 
 function checkSavedSession(){
 var session=getSession();
-if(!session)return;
+console.log('[Session] Checking saved session:', session);
+if(!session){console.log('[Session] No saved session');return;}
 if(session.pending){
+console.log('[Session] Pending session found, showing save popup');
 setSessionContent('¿Guardar sesión?','Tu BTC address: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){setSessionContent('Inicia sesión con Google','Tu BTC address se guardará con tu cuenta Google',[{text:'Cancelar',cls:'btn-secondary',action:function(){clearSession()}}],true)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false)}else if(session.name&&session.email){
-setSessionContent('¿Continuar como '+session.name+'?','Tu BTC address guardada: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){restoreSavedSession(session)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false)}}
+console.log('[Session] Complete session found, showing restore popup');
+setSessionContent('¿Continuar como '+session.name+'?','Tu BTC address guardada: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){restoreSavedSession(session)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false)}else{
+console.log('[Session] Session exists but incomplete:', session)}}
 
 if($('btcAddress')){
 $('btcAddress').addEventListener('input',function(){
@@ -369,16 +373,7 @@ var btcAddress=$('btcAddress').value.trim();
 var existingSession=getSession();
 if(btcAddress.length>20&&(!existingSession||existingSession.pending)){
 saveSession({pending:true,btcAddress:btcAddress,savedAt:Date.now()});
-log('BTC ADDRESS AUTO-SAVED')
-}})}
-
-if($('btcAddress')){
-$('btcAddress').addEventListener('input',function(){
-var btcAddress=$('btcAddress').value.trim();
-var existingSession=getSession();
-if(btcAddress.length>20&&(!existingSession||existingSession.pending)){
-saveSession({pending:true,btcAddress:btcAddress,savedAt:Date.now()});
-log('BTC ADDRESS AUTO-SAVED')
+console.log('[Session] BTC address auto-saved:', btcAddress.substring(0,10)+'...')
 }})}
 
 (function initUI(){
