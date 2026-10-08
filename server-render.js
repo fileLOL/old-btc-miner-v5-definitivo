@@ -221,6 +221,8 @@ app.get('/api/template', async (_q, r) => {
     height: job.height || 0,
     bits: job.nbits || job.bits || '---',
     target: job.blockTarget ? Buffer.from(job.blockTarget).toString('hex') : '---',
+    coinbasevalue: job.coinbasevalue || 0,
+    transactions: 0,
     source: 'stratum-pool',
     jobId: job.jobId
   });
