@@ -257,7 +257,7 @@
 
 <script src="/sha256d.js"></script>
 <script src="/app.js"></script>
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js')}</script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').then(function(r){if(r.waiting)r.update()})}</script>
 
 </body>
 </html>
