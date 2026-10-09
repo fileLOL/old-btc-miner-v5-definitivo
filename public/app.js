@@ -310,14 +310,13 @@ function saveReferralData(d){try{localStorage.setItem(REFERRAL_KEY,JSON.stringif
 
 function generateReferralId(){
 var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
-if(!btcAddress||btcAddress.length<10)return null;
+var seed=btcAddress.length>=10?btcAddress:(navigator.userAgent+(window.screen?window.screen.width+'x'+window.screen.height:'')+(localStorage.getItem('ref_seed')||(function(){var s=Math.random().toString(36).slice(2,10);localStorage.setItem('ref_seed',s);return s})()));
 var hash=0;
-for(var i=0;i<btcAddress.length;i++){hash=((hash<<5)-hash)+btcAddress.charCodeAt(i);hash|=0}
+for(var i=0;i<seed.length;i++){hash=((hash<<5)-hash)+seed.charCodeAt(i);hash|=0}
 return Math.abs(hash).toString(36)+Date.now().toString(36).slice(-4)}
 
 function initReferralSystem(){
 var rid=generateReferralId();
-if(!rid){return}
 var refLink=REFERRAL_BASE+'?ref='+rid;
 if($('referralLink'))$('referralLink').value=refLink;
 var urlParams=new URLSearchParams(window.location.search);
@@ -343,6 +342,8 @@ $('copyReferral').textContent='Copiado!';
 $('copyReferral').classList.add('copied');
 setTimeout(function(){$('copyReferral').textContent='Copiar';$('copyReferral').classList.remove('copied')},2000)
 }catch(e){document.execCommand('copy')}}
+
+if($('btcAddress')){$('btcAddress').addEventListener('input',function(){initReferralSystem()})}
 
 (function initUI(){
 var url=window.BACKEND_URL||'';
