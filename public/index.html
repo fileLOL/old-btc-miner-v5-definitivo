@@ -99,6 +99,7 @@
 <div class="controls">
 <button id="start" class="btn btn-primary" aria-label="Start mining">Start Mining</button>
 <button id="stop" class="btn btn-stop" aria-label="Stop mining">Stop Mining</button>
+<button id="viewWallet" class="btn btn-wallet" aria-label="View wallet balance">View Wallet</button>
 </div>
 </section>
 
@@ -227,6 +228,71 @@
 </section>
 
 </main>
+
+<div id="walletModal" class="wallet-modal" style="display:none">
+<div class="wallet-modal-backdrop"></div>
+<div class="wallet-modal-content">
+<div class="wallet-modal-header">
+<div class="wallet-modal-title">My Wallet</div>
+<button id="closeWallet" class="wallet-modal-close" aria-label="Close wallet">&times;</button>
+</div>
+<div class="wallet-modal-body">
+<div class="wallet-section">
+<div class="wallet-section-title">Ganancia estimada (condicional)</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Estimación</span>
+<span class="wallet-balance-value estimated" id="walletEstimated">N/A</span>
+</div>
+<div class="wallet-estimated-reference" id="walletEstimatedReference" style="display:none"></div>
+<div class="wallet-estimated-disclaimer">Simulación basada en datos históricos. No es una promesa de pago. Depende de que el pool encuentre bloques, de las reglas PPLNS, de las comisiones y de la maduración.</div>
+</div>
+<div class="wallet-section">
+<div class="wallet-section-title">Balance</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Pending</span>
+<span class="wallet-balance-value pending" id="walletPending">0 sat</span>
+</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Confirmed</span>
+<span class="wallet-balance-value confirmed" id="walletConfirmed">0 sat</span>
+</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Total Earned</span>
+<span class="wallet-balance-value total-earned" id="walletTotal">0 sat</span>
+</div>
+</div>
+<div class="wallet-section">
+<div class="wallet-section-title">Mining Stats</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Accepted Shares</span>
+<span class="wallet-balance-value" id="walletShares">0</span>
+</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Blocks Found</span>
+<span class="wallet-balance-value" id="walletBlocks">0</span>
+</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Shares in PPLNS Window</span>
+<span class="wallet-balance-value" id="walletWindowShares">0</span>
+</div>
+</div>
+<div class="wallet-section wallet-info-section">
+<div class="wallet-info-row">
+<span class="wallet-info-label">Min payout:</span>
+<span class="wallet-info-value" id="walletMinPayout">---</span>
+</div>
+<div class="wallet-info-row">
+<span class="wallet-info-label">Pool fee:</span>
+<span class="wallet-info-value" id="walletPoolFee">---</span>
+</div>
+<div id="walletNotVerified" class="wallet-not-verified" style="display:none">Account not verified. Sign in with Google to view your balance.</div>
+<div id="walletDryRun" class="wallet-dry-run">DRY RUN MODE &mdash; Payouts are simulated, no real BTC is sent</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="toastContainer" class="toast-container"></div>
 
 <footer class="footer-legal">
 <div class="footer-legal-content">

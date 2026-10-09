@@ -585,32 +585,34 @@ function handleMessage(ws, minerId, msg) {
   }
 }
 
+const submittedBlocks = new Set();
 async function handleBlockCandidate(ws, minerId, jobId, nonce) {
   try {
     const job = jobManager.getJob(jobId);
     if (!job || job.stale) { ws.send(JSON.stringify({ type: 'blockRejected', reason: 'stale job' })); return }
-    if (stratumClient && stratumClient.connected) {
-      console.log('[Stratum] Block candidate submitted via pool');
+    const dedupKey = jobId + ':' + nonce;
+    if (submittedBlocks.has(dedupKey)) {
+      console.log('[Block] Duplicate block candidate, skipping');
+      ws.send(JSON.stringify({ type: 'blockRejected', reason: 'duplicate submission' }));
+      return
+    }
+    submittedBlocks.add(dedupKey);
+    const blockHex = buildBlock(job, nonce);
+    const blockHash = calculateBlockHash(blockHex);
+    console.log('BLOCK CANDIDATE: height=' + job.height + ' hash=' + blockHash);
+    broadcastBlockFound(minerId, job.height);
+    try {
+      const result = await rpcCall('submitblock', [blockHex]);
+      console.log('BLOCK ACCEPTED by Bitcoin Core:', result || 'accepted');
       const miner = minerTracker.getMiner(minerId);
-      const blockHash = calculateBlockHash(buildBlock(job, nonce));
-      minerTracker.recordBlock(job.height || 0, miner ? miner.accountId : null, minerId, 0);
-      broadcastBlockFound(minerId, job.height || 0);
-      ws.send(JSON.stringify({ type: 'blockAccepted', height: job.height || 0, blockHash }));
-    } else {
-      const blockHex = buildBlock(job, nonce);
-      const blockHash = calculateBlockHash(blockHex);
-      try {
-        const result = await rpcCall('submitblock', [blockHex]);
-        console.log('BLOCK ACCEPTED:', result || 'accepted');
-        const miner = minerTracker.getMiner(minerId);
-        accountManager.insertBlock(miner ? miner.accountId : null, minerId, job.height, job.coinbasevalue || 0, blockHash);
-        minerTracker.recordBlock(job.height, miner ? miner.accountId : null, minerId, job.coinbasevalue || 0);
-        broadcastBlockFound(minerId, job.height);
-        ws.send(JSON.stringify({ type: 'blockAccepted', height: job.height, blockHash }))
-      } catch (e) {
-        console.error('Block rejected:', e.message);
-        ws.send(JSON.stringify({ type: 'blockRejected', reason: e.message }))
-      }
+      accountManager.insertBlock(miner ? miner.accountId : null, minerId, job.height, job.coinbasevalue || 0, blockHash);
+      minerTracker.recordBlock(job.height, miner ? miner.accountId : null, minerId, job.coinbasevalue || 0);
+      ws.send(JSON.stringify({ type: 'blockAccepted', height: job.height, blockHash }))
+    } catch (e) {
+      console.error('BLOCK REJECTED by Bitcoin Core:', e.message);
+      const miner = minerTracker.getMiner(minerId);
+      accountManager.insertBlock(miner ? miner.accountId : null, minerId, job.height, job.coinbasevalue || 0, blockHash);
+      ws.send(JSON.stringify({ type: 'blockRejected', reason: e.message }))
     }
   } catch (err) {
     console.error('Block submission error:', err.message);

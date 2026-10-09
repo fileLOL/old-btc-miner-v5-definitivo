@@ -1,5 +1,5 @@
 const assert=require('assert'),crypto=require('crypto'),SHA256D=require('../public/sha256d.js');
-const{buildCoinbase,addressScript,buildJob,buildBlock,merkle,txidLE,dsha,compactVarint,pushdata,encodeScriptNum}=require('../lib/block-builder');
+const{buildCoinbase,addressScript,buildJob,buildBlock,merkle,txidLE,dsha,compactVarint,pushdata,encodeScriptNum,stripSegwitWitness,coinbaseTxidLE,readVarint}=require('../lib/block-builder');
 const JobManager=require('../lib/job-manager');
 const ShareValidator=require('../lib/share-validator');
 const MinerTracker=require('../lib/miner-tracker');
@@ -95,7 +95,7 @@ assert.strictEqual(result.stale,false,'not stale');
 console.log('  PASS\n');
 
 console.log('[9] ShareValidator: hash mismatch (fake share)');
-const fakeResult=sv.validate({minerId:'miner_test',jobId:currentJob.jobId,nonce:42,hashHex:'00'.repeat(32)});
+const fakeResult=sv.validate({minerId:'miner_test',jobId:currentJob.jobId,nonce:99,hashHex:'00'.repeat(32)});
 assert.strictEqual(fakeResult.valid,false,'invalid share');
 assert(fakeResult.error.includes('mismatch'),'hash mismatch error');
 console.log('  PASS\n');
@@ -119,7 +119,11 @@ assert.strictEqual(badHash.valid,false,'bad hash format rejected');
 console.log('  PASS\n');
 
 console.log('[13] ShareValidator: payout not modifiable by client');
-const clientShare={minerId:'miner_test',jobId:currentJob.jobId,nonce:42,hashHex:testHashHex,payoutAddress:'attacker_address'};
+const clientNonce=777;
+const clientHeader=new Uint8Array(currentJob.header);
+const clientHash=SHA256D.hash80(clientHeader,clientNonce);
+const clientHashHex=SHA256D.hex(clientHash);
+const clientShare={minerId:'miner_test',jobId:currentJob.jobId,nonce:clientNonce,hashHex:clientHashHex,payoutAddress:'attacker_address'};
 const clientResult=sv.validate(clientShare);
 assert.strictEqual(clientResult.valid,true,'payout in share ignored (server uses own)');
 console.log('  PASS\n');
@@ -182,7 +186,8 @@ const blockTargetBuf=Buffer.from(sj.blockTarget);
 let shareBigInt=0n,blockBigInt=0n;
 for(let i=0;i<32;i++){shareBigInt=(shareBigInt<<8n)|BigInt(shareTargetBuf[i]);blockBigInt=(blockBigInt<<8n)|BigInt(blockTargetBuf[i])}
 assert(shareBigInt>blockBigInt,'share target > block target (easier)');
-assert.strictEqual(shareBigInt,blockBigInt*4n,'share target = block target * difficulty');
+const maxTarget=(1n<<256n)-1n;
+assert.strictEqual(shareBigInt,maxTarget/4n,'share target = maxTarget / difficulty');
 console.log('  PASS\n');
 
 mt.destroy();mt2.destroy();rl.destroy();

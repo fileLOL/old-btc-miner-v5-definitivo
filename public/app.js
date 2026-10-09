@@ -6,6 +6,7 @@ var myShares=0,rejectedCount=0;
 var exhausted=0,total=0,lastRate=performance.now(),hashes=0;
 var refreshTimer=null,statusTimer=null,wsHeartbeatTimer=null;
 var wsRetries=0,wsMaxRetries=0,wsReconnectTimer=null,wsBaseDelay=3000,wsMaxDelay=60000;
+var sessionToken=null,googleToken=null,walletPollTimer=null,walletModalOpen=false;
 
 function getBackendHttp(){
 var u=window.BACKEND_URL||'';
@@ -242,11 +243,11 @@ if(ws&&ws.readyState===1){try{ws.send(JSON.stringify({type:'ping'}))}catch(e){}}
 },30000);
 var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
 if(!btcAddress){log('BTC ADDRESS REQUIRED FOR MINING');return}
-try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress}));log('REGISTERING...')}catch(e){log('REGISTER FAILED: '+e.message)}};
+try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress,googleToken:googleToken}));log('REGISTERING...'+(googleToken?' (verified)':' (legacy)'))}catch(e){log('REGISTER FAILED: '+e.message)}};
 ws.onmessage=function(e){
 var msg=JSON.parse(e.data);
 if(msg.type==='welcome'){minerId=msg.minerId;log('MINER ID: '+minerId)}
-else if(msg.type==='registered'){log('REGISTERED // '+msg.btcAddress)}
+else if(msg.type==='registered'){log('REGISTERED // '+msg.btcAddress+(msg.verified?' // VERIFIED':' // legacy'));if($('walletVerified')){$('walletVerified').textContent=msg.verified?'Verified':'Not verified'}}
 else if(msg.type==='newJob'){
 storeJob(msg);
 if(running){stopWorkers();startWorkers()}
@@ -257,10 +258,14 @@ else if(msg.type==='poolStats'){updatePoolUI(msg)}
 else if(msg.type==='blockFound'){log('BLOCK FOUND BY '+msg.minerId+' AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK FOUND!')}
 else if(msg.type==='blockAccepted'){log('BLOCK ACCEPTED AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK ACCEPTED!')}
 else if(msg.type==='blockRejected'){log('BLOCK REJECTED: '+msg.reason)}
+else if(msg.type==='sessionToken'){sessionToken=msg.token;console.log('[Auth] Session token received');log('SESSION AUTHENTICATED');if(walletModalOpen)fetchWalletBalance();startWalletPolling()}
+else if(msg.type==='balanceUpdate'){if(walletModalOpen)updateWalletUI(msg);console.log('[Wallet] Balance update:',msg)}
+else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' credited (block '+msg.block_height+')','reward');if(walletModalOpen)updateWalletUI(msg);log('REWARD: +'+fmtBtc(msg.reward_sat)+' AT BLOCK '+msg.block_height)}
 else if(msg.type==='pong'){}
 else if(msg.type==='error'){log('ERROR: '+msg.error)}};
 ws.onclose=function(){
 if(wsHeartbeatTimer){clearInterval(wsHeartbeatTimer);wsHeartbeatTimer=null}
+sessionToken=null;
 log('WS DISCONNECTED');
 ws=null;
 updateNodePanel('DISCONNECTED');
@@ -299,6 +304,7 @@ running=false;
 stopWorkers();
 updateMinerStatusUI('STOPPED');
 setMiningRate(0);
+stopWalletPolling();
 log('MINING STOPPED')}
 
 if($('start'))$('start').onclick=startMining;
@@ -413,6 +419,7 @@ showOverlay();
 function handleGoogleCredential(response){
 console.log('[Session] Google credential received');
 try{
+googleToken=response.credential;
 var parts=response.credential.split('.');
 if(parts.length!==3){
 throw new Error('Invalid JWT format');
@@ -630,3 +637,106 @@ statusTimer=setInterval(fetchBlockchainData,30000);
 if(refreshTimer)clearInterval(refreshTimer);
 refreshTimer=setInterval(fetchTemplateData,30000)}
 connectWS()})();
+
+async function fetchWalletBalance(){
+if(!sessionToken){console.log('[Wallet] No session token');return}
+var base=getBackendHttp();
+if(!base)return;
+try{
+var r=await fetch(base+'/api/my-balance',{
+method:'GET',
+mode:'cors',
+signal:AbortSignal.timeout(30000),
+headers:{'Authorization':'Bearer '+sessionToken}
+});
+var d={};try{d=await r.json()}catch(e){}
+if(!r.ok||d.ok===false){
+if(r.status===401){
+console.warn('[Wallet] Account not verified (Google Sign-In required)');
+showWalletNotVerified();
+return}
+console.error('[Wallet] Fetch failed:',d.error||r.status);return}
+updateWalletUI(d);
+console.log('[Wallet] Balance fetched:',d)
+}catch(e){console.error('[Wallet] Fetch error:',e.message)}}
+
+function showWalletNotVerified(){
+if($('walletPending'))$('walletPending').textContent='---';
+if($('walletConfirmed'))$('walletConfirmed').textContent='---';
+if($('walletTotal'))$('walletTotal').textContent='---';
+if($('walletShares'))$('walletShares').textContent='---';
+if($('walletBlocks'))$('walletBlocks').textContent='---';
+if($('walletWindowShares'))$('walletWindowShares').textContent='---';
+var notice=$('walletNotVerified');
+if(notice){notice.style.display='block';notice.textContent='Account not verified. Sign in with Google to view your balance.'}}
+
+function updateWalletUI(d){
+  if($('walletPending'))$('walletPending').textContent=fmtBtc(d.pending_sat||0);
+  if($('walletConfirmed'))$('walletConfirmed').textContent=fmtBtc(d.confirmed_sat||0);
+  if($('walletTotal'))$('walletTotal').textContent=fmtBtc(d.total_earned_sat||0);
+  if($('walletShares'))$('walletShares').textContent=String(d.shares_accepted||0);
+  if($('walletBlocks'))$('walletBlocks').textContent=String(d.blocks_found||0);
+  if($('walletWindowShares'))$('walletWindowShares').textContent=String(d.shares_in_window||0);
+  if($('walletMinPayout'))$('walletMinPayout').textContent=(d.min_payout_sat||0).toLocaleString()+' sat';
+  if($('walletPoolFee'))$('walletPoolFee').textContent=(d.pool_fee_percent||0)+'%';
+  if($('walletDryRun'))$('walletDryRun').style.display=d.payout_dry_run?'block':'none';
+  var notice=$('walletNotVerified');
+  if(notice)notice.style.display='none';
+  if($('walletEstimated')){
+    if(d.estimated_has_data){
+      $('walletEstimated').textContent=fmtBtc(d.estimated_sat||0);
+      $('walletEstimated').classList.remove('wallet-value-na');
+    }else{
+      $('walletEstimated').textContent='N/A';
+      $('walletEstimated').classList.add('wallet-value-na');
+    }
+  }
+  if($('walletEstimatedReference')){
+    if(d.estimated_has_data&&d.estimated_reference_height){
+      $('walletEstimatedReference').textContent='Ref: Block #'+d.estimated_reference_height;
+      $('walletEstimatedReference').style.display='block';
+    }else{
+      $('walletEstimatedReference').style.display='none';
+    }
+  }
+}
+
+function openWalletModal(){
+var m=$('walletModal');
+if(m)m.style.display='flex';
+walletModalOpen=true;
+fetchWalletBalance();
+startWalletPolling()}
+
+function closeWalletModal(){
+var m=$('walletModal');
+if(m)m.style.display='none';
+walletModalOpen=false;
+stopWalletPolling()}
+
+function startWalletPolling(){
+stopWalletPolling();
+walletPollTimer=setInterval(function(){
+if(walletModalOpen&&sessionToken)fetchWalletBalance()
+},10000)}
+
+function stopWalletPolling(){
+if(walletPollTimer){clearInterval(walletPollTimer);walletPollTimer=null}}
+
+function showToast(msg,type){
+var container=$('toastContainer');
+if(!container)return;
+var toast=document.createElement('div');
+toast.className='toast toast-'+(type||'info');
+var icons={reward:'&#9989;',info:'&#9888;',error:'&#10060;'};
+toast.innerHTML='<span class="toast-icon">'+(icons[type]||icons.info)+'</span><span class="toast-msg">'+msg+'</span>';
+container.appendChild(toast);
+setTimeout(function(){
+toast.classList.add('toast-out');
+setTimeout(function(){if(toast.parentNode)toast.parentNode.removeChild(toast)},300)
+},4000)}
+
+if($('viewWallet'))$('viewWallet').onclick=openWalletModal;
+if($('closeWallet'))$('closeWallet').onclick=closeWalletModal;
+var backdrop=document.querySelector('.wallet-modal-backdrop');
+if(backdrop)backdrop.onclick=closeWalletModal;

@@ -47,6 +47,8 @@ services:
         value: "3600000"
       - key: PAYOUT_DRY_RUN
         value: "true"
+      - key: GOOGLE_CLIENT_ID
+        value: "46928798077-vtsu6fln277j6s601n2b4feg1hrsfi72.apps.googleusercontent.com"
       - key: STRATUM_POOL_HOST
         value: "btc.f2pool.com"
       - key: STRATUM_POOL_PORT

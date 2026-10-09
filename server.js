@@ -17,6 +17,9 @@ const PayoutMonitor=require('./lib/payout-monitor');
 const AuditLog=require('./lib/audit');
 const TestPayoutRunner=require('./lib/test-payout-runner');
 const StratumServer=require('./lib/stratum-server');
+const SessionManager=require('./lib/session-manager');
+const{verifyGoogleIdToken}=require('./lib/google-auth');
+const GOOGLE_CLIENT_ID=process.env.GOOGLE_CLIENT_ID||'46928798077-vtsu6fln277j6s601n2b4feg1hrsfi72.apps.googleusercontent.com';
 
 const app=express();
 const server=http.createServer(app);
@@ -27,7 +30,7 @@ const origin=config.CORS_ORIGIN;
 if(origin==='*'){res.header('Access-Control-Allow-Origin','*')}
 else if(origin&&origin.split(',').map(s=>s.trim()).includes(req.headers.origin)){res.header('Access-Control-Allow-Origin',req.headers.origin)}
 res.header('Access-Control-Allow-Methods','GET,POST,OPTIONS');
-res.header('Access-Control-Allow-Headers','Content-Type');
+res.header('Access-Control-Allow-Headers','Content-Type,Authorization');
 if(req.method==='OPTIONS')return res.sendStatus(200);
 next()});
 
@@ -47,6 +50,43 @@ const payoutProcessor=new PayoutProcessor(config,btcCli);
 const payoutMonitor=new PayoutMonitor(config,btcCli);
 const testPayoutRunner=new TestPayoutRunner(config,btcCli);
 const stratumServer=new StratumServer(config,jobManager,minerTracker,accountManager);
+const sessionManager=new SessionManager();
+
+function authenticateRequest(req){
+const auth=req.headers.authorization||'';
+if(!auth.startsWith('Bearer '))return null;
+const token=auth.slice(7);
+if(!token||token.length!==64||!/^[0-9a-f]{64}$/.test(token))return null;
+const session=sessionManager.validateSessionFull(token);
+if(session){sessionManager.touchSession(token);return session}
+return null}
+
+function authenticateVerifiedRequest(req){
+const session=authenticateRequest(req);
+if(!session)return null;
+if(!session.googleId)return null;
+return session}
+
+blockMonitor.onRewardsApplied=function(block,rewardsResult){
+for(const reward of rewardsResult.rewards){
+try{
+const balance=accountManager.getBalance(reward.account_id);
+broadcastToAccount(reward.account_id,{
+type:'rewardDistributed',
+block_height:block.height,
+block_id:block.id,
+reward_sat:reward.reward_sat,
+pending_sat:balance?balance.pending_sat:0,
+confirmed_sat:balance?balance.confirmed_sat:0,
+total_earned_sat:balance?balance.total_earned_sat:0,
+timestamp:Date.now()})}
+catch(e){console.error('[WS] rewardDistributed error:',e.message)}}}
+
+function broadcastToAccount(accountId,msg){
+const data=JSON.stringify(msg);
+wss.clients.forEach(ws=>{
+if(ws.accountId===accountId&&ws.readyState===WebSocket.OPEN){
+try{ws.send(data)}catch{}}})}
 
 function calculateBlockHash(blockHex){
 const headerBuf=Buffer.from(blockHex.slice(0,160),'hex');
@@ -61,10 +101,12 @@ if(stderr&&stderr.trim())throw Error(stderr.trim());
 return stdout.trim()}
 
 let lastTemplateHeight=null;
+let ibdError=null;
 async function refreshTemplate(){
 try{
 const raw=await btcCli(['getblocktemplate','{"rules":["segwit"]}']);
 const t=JSON.parse(raw);
+if(ibdError){console.log('[Template] Bitcoin Core sync complete, resuming job distribution');ibdError=null}
 if(t.height!==lastTemplateHeight){
 lastTemplateHeight=t.height;
 const job=jobManager.setTemplate(t);
@@ -72,7 +114,12 @@ broadcastJob(job)}
 else if(jobManager.currentTemplate&&t.previousblockhash!==jobManager.currentTemplate.previousblockhash){
 const job=jobManager.setTemplate(t);
 broadcastJob(job)}}
-catch(e){console.error('Template refresh error:',e.message)}}
+catch(e){
+const msg=e.message||'';
+if(msg.indexOf('-10')>=0||msg.indexOf('Initial block download')>=0||msg.indexOf('Verifying blocks')>=0){
+if(!ibdError){console.warn('[Template] Bitcoin Core is syncing blocks (IBD). Mining unavailable until sync completes.');ibdError='Bitcoin Core is syncing blocks (IBD). Mining unavailable.';
+wss.clients.forEach(client=>{if(client.readyState===WebSocket.OPEN){try{client.send(JSON.stringify({type:'ibdStatus',ibd:true,message:ibdError}))}catch{}}})}}
+else{ibdError=null;console.error('Template refresh error:',e.message)}}}
 
 function broadcastJob(job){
 const msg=JSON.stringify({type:'newJob',jobId:job.jobId,height:job.height,header:job.header,midstate:job.midstate,shareTarget:job.shareTarget,blockTarget:job.blockTarget,nonceStart:0,nonceEnd:4294967295});
@@ -85,7 +132,7 @@ function startBroadcastLoop(){
 if(broadcastInterval)return;
 broadcastInterval=setInterval(()=>{
 const stats=minerTracker.getPoolStats();
-const msg=JSON.stringify({type:'poolStats',...stats});
+const msg=JSON.stringify({type:'poolStats',...stats,ibd:!!ibdError,ibdMessage:ibdError||''});
 wss.clients.forEach(client=>{
 if(client.readyState===WebSocket.OPEN){
 try{client.send(msg)}catch{}}})},5000)}
@@ -107,13 +154,18 @@ catch(e){r.status(503).json({ok:false,error:e.message})}});
 app.get('/api/template',async(_q,r)=>{
 try{
 const t=JSON.parse(await btcCli(['getblocktemplate','{"rules":["segwit"]}']));
+if(ibdError)ibdError=null;
 r.json({ok:true,height:t.height,previousblockhash:t.previousblockhash,bits:t.bits,target:t.target,curtime:t.curtime,mintime:t.mintime,transactions:t.transactions?.length||0,coinbasevalue:t.coinbasevalue,raw:t})}
-catch(e){r.status(503).json({ok:false,error:e.message})}});
+catch(e){
+const msg=e.message||'';
+const isIbd=msg.indexOf('-10')>=0||msg.indexOf('Initial block download')>=0||msg.indexOf('Verifying blocks')>=0;
+r.status(503).json({ok:false,error:e.message,ibd:isIbd,ibdMessage:isIbd?'Bitcoin Core is syncing blocks (IBD). Mining unavailable.':undefined})}});
 
 app.get('/api/job',async(_req,res)=>{
 try{
 const address=config.PAYOUT_ADDRESS;
 if(!address)throw Error('Payout address not configured');
+if(ibdError)throw Error(ibdError);
 
 const t=JSON.parse(await btcCli(['getblocktemplate','{"rules":["segwit"]}']));
 
@@ -129,7 +181,9 @@ if(
 
 res.json({ok:true,...job});
 }catch(e){
-res.status(400).json({ok:false,error:e.message});
+const msg=e.message||'';
+const isIbd=msg.indexOf('-10')>=0||msg.indexOf('IBD')>=0||msg.indexOf('syncing')>=0;
+res.status(400).json({ok:false,error:e.message,ibd:isIbd});
 }});
 
 app.post('/api/submit',async(req,res)=>{
@@ -202,6 +256,38 @@ res.json({ok:true,account_id:stats.account_id,btc_address:stats.btc_address,shar
 catch(e){
 console.error('Get my-stats error:',e.message);
 res.status(500).json({ok:false,error:e.message})}});
+
+app.get('/api/my-balance',(req,res)=>{
+  const session=authenticateVerifiedRequest(req);
+  if(!session){return res.status(401).json({ok:false,error:'unauthorized: verified account required'})}
+  const accountId=session.accountId;
+  try{
+    const stats=rewardEngine.getAccountStats(accountId);
+    if(!stats){return res.status(404).json({ok:false,error:'account not found'})}
+    const windowStats=rewardEngine.getSharesInWindow(accountId,config.PPLNS_WINDOW_SIZE);
+    const shareCount=accountManager.getShareCountByAccount(accountId);
+    const estimation=rewardEngine.getEstimatedReward(accountId,config.PPLNS_WINDOW_SIZE,config.POOL_FEE_PERCENT);
+    res.json({ok:true,
+      verified:true,
+      pending_sat:stats.balance?stats.balance.pending_sat:0,
+      confirmed_sat:stats.balance?stats.balance.confirmed_sat:0,
+      total_earned_sat:stats.balance?stats.balance.total_earned_sat:0,
+      shares_accepted:shareCount,
+      shares_in_window:windowStats.count,
+      blocks_found:stats.blocks_found,
+      pool_fee_percent:config.POOL_FEE_PERCENT,
+      payout_dry_run:config.PAYOUT_DRY_RUN,
+      min_payout_sat:config.MIN_PAYOUT_SAT,
+      estimated_sat:estimation.estimated_sat,
+      estimated_has_data:estimation.has_valid_data,
+      estimated_reason:estimation.reason,
+      estimated_reference_block:estimation.reference_block_id,
+      estimated_reference_height:estimation.reference_block_height,
+      estimated_reference_coinbase_sat:estimation.reference_coinbase_sat,
+      estimated_proportion:estimation.miner_proportion})}
+  catch(e){
+    console.error('Get my-balance error:',e.message);
+    res.status(500).json({ok:false,error:e.message})}});
 
 app.get('/api/pool-info',(_q,r)=>{
 try{
@@ -291,6 +377,7 @@ if(!registered){ws.close(1013,'Max miners reached');return}
 ws.minerId=minerId;
 ws.registered=false;
 ws.accountId=null;
+ws.sessionToken=null;
 console.log(`Miner connected: ${minerId} (total: ${minerTracker.getMinerCount()})`);
 
 ws.send(JSON.stringify({type:'welcome',minerId,version:'5.1.0-pool'}));
@@ -314,6 +401,7 @@ catch{}});
 
 ws.on('close',()=>{
 if(ws.registrationTimeout)clearTimeout(ws.registrationTimeout);
+if(ws.sessionToken){sessionManager.destroySession(ws.sessionToken);ws.sessionToken=null}
 minerTracker.unregister(minerId);
 console.log(`Miner disconnected: ${minerId} (total: ${minerTracker.getMinerCount()})`)});
 
@@ -327,7 +415,7 @@ if(msg.type==='register'){
 if(ws.registered){
 ws.send(JSON.stringify({type:'error',error:'Already registered'}));
 return}
-const{btcAddress}=msg;
+const{btcAddress,googleToken}=msg;
 if(!btcAddress||typeof btcAddress!=='string'){
 ws.send(JSON.stringify({type:'registerFailed',error:'btcAddress required'}));
 return}
@@ -335,18 +423,87 @@ const validation=validateAddress(btcAddress);
 if(!validation.valid){
 ws.send(JSON.stringify({type:'registerFailed',error:'Invalid Bitcoin address: '+validation.error}));
 return}
+(async()=>{
 try{
+let googleData=null;
+if(googleToken){
+googleData=await verifyGoogleIdToken(googleToken,GOOGLE_CLIENT_ID);
+if(!googleData.valid){
+ws.send(JSON.stringify({type:'registerFailed',error:'invalid Google token: '+googleData.error}));
+console.log(`Registration rejected: invalid Google token (${googleData.error})`);
+return}
+}
+const existingAccount=accountManager.getAccountByAddress(btcAddress);
+if(existingAccount){
+const activeCount=sessionManager.getAccountTokenCount(existingAccount.account_id);
+if(activeCount>0){
+ws.send(JSON.stringify({type:'registerFailed',error:'account has active session'}));
+console.log(`Registration rejected for ${existingAccount.account_id}: active session exists`);
+return}
+const existingIdentity=accountManager.getIdentityByAccountId(existingAccount.account_id);
+if(googleData){
+if(!existingIdentity){
+ws.send(JSON.stringify({type:'registerFailed',error:'account exists but not verified with Google; cannot claim with Google Sign-In'}));
+console.log(`Registration rejected: account ${existingAccount.account_id} not verified, Google claim denied`);
+return}
+if(existingIdentity.google_id!==googleData.googleId){
+ws.send(JSON.stringify({type:'registerFailed',error:'account already verified with different Google account'}));
+console.log(`Registration rejected: account ${existingAccount.account_id} linked to different Google account`);
+return}
+const token=sessionManager.createSession(existingAccount.account_id,googleData.googleId);
+const userAgent=ws.upgradeReq?.headers?.['user-agent']||null;
+minerTracker.linkAccount(minerId,existingAccount.account_id,userAgent);
+ws.registered=true;
+ws.accountId=existingAccount.account_id;
+ws.sessionToken=token;
+ws.googleId=googleData.googleId;
+if(ws.registrationTimeout)clearTimeout(ws.registrationTimeout);
+ws.send(JSON.stringify({type:'registered',accountId:existingAccount.account_id,btcAddress:existingAccount.btc_address,isNew:false,verified:true}));
+ws.send(JSON.stringify({type:'sessionToken',token:token}));
+console.log(`Miner ${minerId} registered (verified) with account ${existingAccount.account_id}`);
+return}
+const token=sessionManager.createSession(existingAccount.account_id,null);
+const userAgent=ws.upgradeReq?.headers?.['user-agent']||null;
+minerTracker.linkAccount(minerId,existingAccount.account_id,userAgent);
+ws.registered=true;
+ws.accountId=existingAccount.account_id;
+ws.sessionToken=token;
+ws.googleId=null;
+if(ws.registrationTimeout)clearTimeout(ws.registrationTimeout);
+ws.send(JSON.stringify({type:'registered',accountId:existingAccount.account_id,btcAddress:existingAccount.btc_address,isNew:false,verified:false}));
+ws.send(JSON.stringify({type:'sessionToken',token:token}));
+console.log(`Miner ${minerId} registered (legacy) with account ${existingAccount.account_id}`);
+return}
+if(googleData){
 const account=accountManager.getOrCreateAccount(btcAddress);
+accountManager.createIdentity(account.account_id,googleData.googleId,googleData.email,googleData.name);
+const token=sessionManager.createSession(account.account_id,googleData.googleId);
 const userAgent=ws.upgradeReq?.headers?.['user-agent']||null;
 minerTracker.linkAccount(minerId,account.account_id,userAgent);
 ws.registered=true;
 ws.accountId=account.account_id;
+ws.sessionToken=token;
+ws.googleId=googleData.googleId;
 if(ws.registrationTimeout)clearTimeout(ws.registrationTimeout);
-ws.send(JSON.stringify({type:'registered',accountId:account.account_id,btcAddress:account.btc_address,isNew:account.isNew}));
-console.log(`Miner ${minerId} registered with account ${account.account_id} (${account.btc_address})`)}
+ws.send(JSON.stringify({type:'registered',accountId:account.account_id,btcAddress:account.btc_address,isNew:account.isNew,verified:true}));
+ws.send(JSON.stringify({type:'sessionToken',token:token}));
+console.log(`Miner ${minerId} registered (verified) with NEW account ${account.account_id}`);
+return}
+const account=accountManager.getOrCreateAccount(btcAddress);
+const token=sessionManager.createSession(account.account_id,null);
+const userAgent=ws.upgradeReq?.headers?.['user-agent']||null;
+minerTracker.linkAccount(minerId,account.account_id,userAgent);
+ws.registered=true;
+ws.accountId=account.account_id;
+ws.sessionToken=token;
+ws.googleId=null;
+if(ws.registrationTimeout)clearTimeout(ws.registrationTimeout);
+ws.send(JSON.stringify({type:'registered',accountId:account.account_id,btcAddress:account.btc_address,isNew:account.isNew,verified:false}));
+ws.send(JSON.stringify({type:'sessionToken',token:token}));
+console.log(`Miner ${minerId} registered (legacy) with NEW account ${account.account_id}`)}
 catch(e){
 console.error('Registration error:',e.message);
-ws.send(JSON.stringify({type:'registerFailed',error:e.message}))}}
+ws.send(JSON.stringify({type:'registerFailed',error:e.message}))}})()}
 
 else if(msg.type==='share'){
 if(!ws.registered){
@@ -370,6 +527,18 @@ minerTracker.addShare(minerId,{jobId:result.jobId,nonce:result.nonce,hashHex:res
 const miner=minerTracker.getMiner(minerId);
 if(miner&&miner.accountId){AuditLog.logShare(miner.accountId,result.jobId,config.SHARE_DIFFICULTY||1)}
 ws.send(JSON.stringify({type:'shareAccepted',jobId:result.jobId,nonce:result.nonce}));
+if(ws.accountId){
+try{
+const bal=accountManager.getBalance(ws.accountId);
+const totalShares=accountManager.getShareCountByAccount(ws.accountId);
+broadcastToAccount(ws.accountId,{
+type:'balanceUpdate',
+pending_sat:bal?bal.pending_sat:0,
+confirmed_sat:bal?bal.confirmed_sat:0,
+total_earned_sat:bal?bal.total_earned_sat:0,
+shares_accepted:totalShares,
+timestamp:Date.now()})}
+catch(e){}}
 if(result.meetsBlockTarget){
 console.log(`BLOCK CANDIDATE from ${minerId}! Nonce: ${result.nonce}`);
 handleBlockCandidate(ws,minerId,result.jobId,result.nonce)}}
@@ -461,6 +630,7 @@ minerTracker.destroy();
 rateLimiter.destroy();
 blockMonitor.stop();
 payoutMonitor.stop();
+sessionManager.destroy();
 try{testPayoutRunner.close()}catch{}
 jobManager.activeJobs.clear();
 wss.close();
@@ -468,4 +638,4 @@ server.close();
 try{closeDb()}catch{}
 process.exit(0)});
 
-module.exports={app,server,jobManager,shareValidator,minerTracker,rateLimiter,btcCli,config,stratumServer};
+module.exports={app,server,jobManager,shareValidator,minerTracker,rateLimiter,btcCli,config,stratumServer,sessionManager};
