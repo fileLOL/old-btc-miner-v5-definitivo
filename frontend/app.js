@@ -304,7 +304,7 @@ log('MINING STOPPED')}
 if($('start'))$('start').onclick=startMining;
 if($('stop'))$('stop').onclick=function(){stopMining();askSaveSession()};
 var deferredPrompt=null;
-window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferredPrompt=e});
+window.addEventListener('beforeinstallprompt',function(e){deferredPrompt=e});
 if($('downloadApp'))$('downloadApp').onclick=function(){
 if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(function(r){deferredPrompt=null});return}
 var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
@@ -576,21 +576,9 @@ seed=(seed*1103515245+12345)&0x7fffffff;
 if(seed%3!==0){ctx.fillRect(col*cellSize,row*cellSize,cellSize,cellSize)}}}}}
 
 function initAdBanner(){
-var AD_UNIT_ID='516731';
-if(!AD_UNIT_ID){return}
 var banner=$('adBanner');
 if(!banner)return;
-banner.innerHTML='<div class="ad-placeholder"><span class="ad-label">Publicidad</span><span class="ad-text">Espacio publicitario disponible</span></div>';
-fetch('https://a-ads.com/'+AD_UNIT_ID+'.js').then(function(r){
-if(!r.ok) return;
-return r.text()
-}).then(function(text){
-if(!text) return;
-banner.innerHTML='';
-var s=document.createElement('script');
-s.textContent=text;
-banner.appendChild(s)
-}).catch(function(){})}
+banner.innerHTML='<div class="ad-placeholder"><span class="ad-label">Publicidad</span><span class="ad-text">Espacio publicitario disponible</span></div>'}
 
 if($('btcAddress')){
 $('btcAddress').addEventListener('input',function(){

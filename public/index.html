@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mining BTC</title>
-<link rel="stylesheet" href="/style.css?v=6">
+<link rel="stylesheet" href="/style.css?v=7">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#f7931a">
@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="/config.js?v=6"></script>
+<script src="/config.js?v=7"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -255,8 +255,8 @@
 
 </div>
 
-<script src="/sha256d.js?v=6"></script>
-<script src="/app.js?v=6"></script>
+<script src="/sha256d.js?v=7"></script>
+<script src="/app.js?v=7"></script>
 <script>
 (function(){
 if('serviceWorker' in navigator){
@@ -264,7 +264,7 @@ navigator.serviceWorker.getRegistrations().then(function(regs){
 for(var i=0;i<regs.length;i++){regs[i].unregister()}
 });
 caches.keys().then(function(names){for(var i=0;i<names.length;i++){caches.delete(names[i])}});
-navigator.serviceWorker.register('/sw.js?v=6').catch(function(){})
+navigator.serviceWorker.register('/sw.js?v=7').catch(function(){})
 }
 })();
 </script>
