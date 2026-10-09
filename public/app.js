@@ -582,10 +582,12 @@ var wrap=$('adBannerWrap');
 if(!wrap)return;
 var banner=$('adBanner');
 banner.innerHTML='';
+try{
 var script=document.createElement('script');
 script.src='https://a-ads.com/'+AD_UNIT_ID+'.js';
 script.async=true;
-banner.appendChild(script)}
+script.onerror=function(){banner.innerHTML='<div class="ad-placeholder"><span class="ad-label">Publicidad</span><span class="ad-text">Espacio publicitario disponible</span></div>'};
+banner.appendChild(script)}catch(e){}}
 
 if($('btcAddress')){
 $('btcAddress').addEventListener('input',function(){

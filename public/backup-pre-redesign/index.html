@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bitcoin Mining Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="/config.js"></script>
+</head>
+<body>
+<div class="dashboard">
+<header class="header">
+<div class="header-left">
+<div class="logo">₿</div>
+<div class="title">
+<h1>BITCOIN MINING DASHBOARD</h1>
+<div class="subtitle">Mainnet Pool · v5.1</div>
+</div>
+</div>
+<div class="header-right">
+<div class="node-status">
+<span class="indicator" id="led"></span>
+<span id="statusText">NODE OFFLINE</span>
+</div>
+<div class="clock" id="clock">--:--:--</div>
+</div>
+</header>
+
+<div class="grid">
+<section class="panel panel-node">
+<div class="panel-header">NODE</div>
+<div class="panel-body">
+<div class="status-row">
+<div class="status-item">
+<span class="label">Connection</span>
+<span class="value" id="connection">Disconnected</span>
+</div>
+<div class="status-item">
+<span class="label">Chain</span>
+<span class="value" id="network">---</span>
+</div>
+</div>
+<div class="status-row">
+<div class="status-item">
+<span class="label">Peers</span>
+<span class="value">-</span>
+</div>
+<div class="status-item">
+<span class="label">Sync</span>
+<span class="value">-</span>
+</div>
+</div>
+</div>
+</section>
+
+<section class="panel panel-blockchain">
+<div class="panel-header">BLOCKCHAIN</div>
+<div class="panel-body">
+<div class="metric-large">
+<div class="metric-label">Blocks</div>
+<div class="metric-value" id="blocks">---</div>
+</div>
+<div class="metric-large">
+<div class="metric-label">Difficulty</div>
+<div class="metric-value" id="difficulty">---</div>
+</div>
+</div>
+</section>
+
+<section class="panel panel-network">
+<div class="panel-header">NETWORK</div>
+<div class="panel-body">
+<div class="metric-large">
+<div class="metric-label">Hashrate</div>
+<div class="metric-value" id="hashrate">---</div>
+</div>
+<div class="metric-large">
+<div class="metric-label">Miners</div>
+<div class="metric-value" id="minersOnline">0</div>
+</div>
+</div>
+</section>
+
+<section class="panel panel-mining">
+<div class="panel-header">MINING</div>
+<div class="panel-body">
+<div class="wallet-section">
+<div class="label">Wallet Address</div>
+<div class="wallet-input-wrapper">
+<input type="text" id="btcAddress" placeholder="bc1q..." class="wallet-input">
+</div>
+</div>
+<div class="status-grid">
+<div class="status-box">
+<div class="status-label">Status</div>
+<div class="status-value" id="minerStatus">IDLE</div>
+</div>
+<div class="status-box">
+<div class="status-label">Workers</div>
+<div class="status-value" id="workerCount">0</div>
+</div>
+</div>
+<div class="hashrate-display">
+<div class="label">Your Hashrate</div>
+<div class="hashrate-value" id="minerHashrate">0 H/s</div>
+</div>
+<div class="shares-display">
+<div class="label">Shares</div>
+<div class="shares-grid">
+<div class="share-box">
+<div class="share-count" id="myShares">0</div>
+<div class="share-label">Accepted</div>
+</div>
+<div class="share-box rejected">
+<div class="share-count" id="rejectedShares">0</div>
+<div class="share-label">Rejected</div>
+</div>
+</div>
+</div>
+<div class="controls">
+<button id="start" class="btn btn-primary">START MINING</button>
+<button id="stop" class="btn btn-secondary">STOP</button>
+</div>
+</div>
+</section>
+
+<section class="panel panel-pool">
+<div class="panel-header">POOL</div>
+<div class="panel-body">
+<div class="stat-row">
+<span class="stat-label">Pool Hashrate</span>
+<span class="stat-value" id="poolHashrate">0 H/s</span>
+</div>
+<div class="stat-row">
+<span class="stat-label">Valid Blocks</span>
+<span class="stat-value" id="validBlocks">0</span>
+</div>
+<div class="stat-row">
+<span class="stat-label">Last Reward</span>
+<span class="stat-value" id="lastReward">0 BTC</span>
+</div>
+<div class="stat-row">
+<span class="stat-label">Current Job</span>
+<span class="stat-value" id="templateHeight">---</span>
+</div>
+</div>
+</section>
+
+<section class="panel panel-log">
+<div class="panel-header">LOG</div>
+<div class="panel-body">
+<div class="log-content" id="log">SYSTEM READY...</div>
+</div>
+</section>
+
+<section class="panel panel-template" style="display:none">
+<div class="panel-header">BLOCK TEMPLATE</div>
+<div class="panel-body">
+<div class="stat-row">
+<span class="stat-label">Height</span>
+<span class="stat-value" id="tHeight">---</span>
+</div>
+<div class="stat-row">
+<span class="stat-label">Previous</span>
+<span class="stat-value mono" id="prev">---</span>
+</div>
+<div class="stat-row">
+<span class="stat-label">Bits</span>
+<span class="stat-value mono" id="bits">---</span>
+</div>
+<div class="stat-row">
+<span class="stat-label">Target</span>
+<span class="stat-value mono" id="target">---</span>
+</div>
+<div class="stat-row">
+<span class="stat-label">Transactions</span>
+<span class="stat-value" id="txcount">---</span>
+</div>
+<div class="stat-row">
+<span class="stat-label">Coinbase</span>
+<span class="stat-value" id="coinbase">---</span>
+</div>
+</div>
+</section>
+</div>
+</div>
+
+<script src="/sha256d.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
