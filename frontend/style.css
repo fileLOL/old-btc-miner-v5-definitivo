@@ -186,6 +186,59 @@ font-size:11px;color:var(--text-muted)
 .controls{flex-direction:column;gap:4px}
 }
 
+/* REFERRAL */
+.referral-wrap{padding:10px 12px}
+.referral-info{display:flex;flex-direction:column;gap:8px}
+.referral-label{font-size:11px;font-weight:600;letter-spacing:.8px;color:var(--text-muted);text-transform:uppercase}
+.referral-link-row{display:flex;gap:4px}
+.referral-input{
+flex:1;background:var(--bg-input);border:1px solid var(--border);
+color:var(--green);padding:7px 10px;font-family:var(--font-mono);
+font-size:12px;outline:none;cursor:pointer
+}
+.referral-input:focus{border-color:var(--green)}
+.btn-copy{
+background:var(--bg-header);color:var(--text-dim);border:1px solid var(--border);
+padding:7px 14px;font-family:var(--font-ui);font-size:11px;font-weight:600;
+cursor:pointer;text-transform:uppercase;white-space:nowrap
+}
+.btn-copy:hover{color:var(--green);border-color:var(--green)}
+.btn-copy.copied{color:var(--green);border-color:var(--green)}
+.referral-stats{display:flex;gap:16px;padding-top:4px}
+.referral-stat{font-size:12px;color:var(--text-dim)}
+.referral-stat strong{color:var(--orange)}
+
+/* DONATE */
+.panel-donate{border:1px solid var(--border);background:var(--bg-panel)}
+.donate-wrap{padding:10px 12px}
+.donate-info{display:flex;flex-direction:column;gap:8px}
+.donate-label{font-size:11px;font-weight:600;letter-spacing:.8px;color:var(--text-muted);text-transform:uppercase}
+.donate-desc{font-size:12px;color:var(--text-muted);line-height:1.4}
+.donate-address-row{display:flex;gap:4px}
+.donate-input{
+flex:1;background:var(--bg-input);border:1px solid var(--border);
+color:var(--orange);padding:7px 10px;font-family:var(--font-mono);
+font-size:12px;outline:none;cursor:pointer
+}
+.donate-input:focus{border-color:var(--orange)}
+.donate-qr-wrap{display:flex;justify-content:center;padding:8px 0}
+.donate-qr-wrap canvas{border:4px solid #fff;background:#fff}
+
+/* AD BANNER */
+.ad-banner-wrap{padding:0}
+.ad-banner{
+background:var(--bg-header);border:1px solid var(--border);
+min-height:60px;display:flex;align-items:center;justify-content:center;
+overflow:hidden;position:relative
+}
+.ad-placeholder{
+display:flex;flex-direction:column;align-items:center;gap:4px;
+padding:12px;width:100%
+}
+.ad-label{font-size:9px;font-weight:600;letter-spacing:1px;color:var(--text-muted);text-transform:uppercase}
+.ad-text{font-size:11px;color:var(--text-muted)}
+.ad-banner iframe,.ad-banner img{max-width:100%;display:block}
+
 /* SESSION POPUP */
 .session-overlay{
 position:fixed;top:0;left:0;right:0;bottom:0;

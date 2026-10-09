@@ -482,6 +482,99 @@ console.log('[Session] Incomplete session, ignoring');
 }
 }
 
+var REFERRAL_KEY='mining_btc_referral';
+var REFERRAL_BASE=window.location.origin+window.location.pathname;
+
+function getReferralData(){try{return JSON.parse(localStorage.getItem(REFERRAL_KEY))||{}}catch(e){return{}}}
+function saveReferralData(d){try{localStorage.setItem(REFERRAL_KEY,JSON.stringify(d))}catch(e){}}
+
+function generateReferralId(){
+var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+if(!btcAddress||btcAddress.length<10)return null;
+var hash=0;
+for(var i=0;i<btcAddress.length;i++){hash=((hash<<5)-hash)+btcAddress.charCodeAt(i);hash|=0}
+return Math.abs(hash).toString(36)+Date.now().toString(36).slice(-4)}
+
+function initReferralSystem(){
+var rid=generateReferralId();
+if(!rid){return}
+var refLink=REFERRAL_BASE+'?ref='+rid;
+if($('referralLink'))$('referralLink').value=refLink;
+var urlParams=new URLSearchParams(window.location.search);
+var incomingRef=urlParams.get('ref');
+if(incomingRef){
+var data=getReferralData();
+if(!data.referredBy){
+data.referredBy=incomingRef;
+data.referredAt=Date.now();
+saveReferralData(data);
+log('REFERRAL TRACKED: '+incomingRef)}}
+var data=getReferralData();
+if($('referralCount'))$('referralCount').textContent=String(data.referrals||0);
+if($('referralActive'))$('referralActive').textContent=String(data.activeReferrals||0)}
+
+if($('copyReferral'))$('copyReferral').onclick=function(){
+var input=$('referralLink');
+if(!input)return;
+input.select();
+try{
+navigator.clipboard.writeText(input.value);
+$('copyReferral').textContent='Copiado!';
+$('copyReferral').classList.add('copied');
+setTimeout(function(){$('copyReferral').textContent='Copiar';$('copyReferral').classList.remove('copied')},2000)
+}catch(e){document.execCommand('copy')}}
+
+function initDonateSystem(){
+var DONATE_ADDRESS='bc1qd2fu79gkkn8juju67t066jhwpw6r4t3plxsamn';
+if($('donateAddress'))$('donateAddress').value=DONATE_ADDRESS;
+generateQR(DONATE_ADDRESS);
+if($('copyDonate'))$('copyDonate').onclick=function(){
+var input=$('donateAddress');
+if(!input)return;
+input.select();
+try{
+navigator.clipboard.writeText(input.value);
+$('copyDonate').textContent='Copiado!';
+$('copyDonate').classList.add('copied');
+setTimeout(function(){$('copyDonate').textContent='Copiar';$('copyDonate').classList.remove('copied')},2000)
+}catch(e){document.execCommand('copy')}}}
+
+function generateQR(text){
+var canvas=$('donateQr');
+if(!canvas)return;
+var ctx=canvas.getContext('2d');
+var size=120;
+var modules=25;
+var cellSize=size/modules;
+ctx.fillStyle='#ffffff';
+ctx.fillRect(0,0,size,size);
+ctx.fillStyle='#000000';
+var data=text.split('');
+var seed=0;
+for(var i=0;i<text.length;i++){seed=((seed<<5)-seed)+text.charCodeAt(i);seed|=0}
+for(var row=0;row<modules;row++){
+for(var col=0;col<modules;col++){
+var isFinderPattern=(row<7&&col<7)||(row<7&&col>=modules-7)||(row>=modules-7&&col<7);
+if(isFinderPattern){
+var isOuter=row===0||row===6||col===0||col===6||row===modules-1||row===modules-7||col===modules-1||col===modules-7;
+var isInner=row>=2&&row<=4&&col>=2&&col<=4||row>=2&&row<=4&&col>=modules-5&&col<=modules-3||row>=modules-5&&row<=modules-3&&col>=2&&col<=4;
+if(isOuter||isInner){ctx.fillRect(col*cellSize,row*cellSize,cellSize,cellSize)}
+}else{
+seed=(seed*1103515245+12345)&0x7fffffff;
+if(seed%3!==0){ctx.fillRect(col*cellSize,row*cellSize,cellSize,cellSize)}}}}}
+
+function initAdBanner(){
+var AD_UNIT_ID='516731';
+if(!AD_UNIT_ID){return}
+var wrap=$('adBannerWrap');
+if(!wrap)return;
+var banner=$('adBanner');
+banner.innerHTML='';
+var script=document.createElement('script');
+script.src='https://a-ads.com/'+AD_UNIT_ID+'.js';
+script.async=true;
+banner.appendChild(script)}
+
 if($('btcAddress')){
 $('btcAddress').addEventListener('input',function(){
 var btcAddress=$('btcAddress').value.trim();
@@ -490,7 +583,7 @@ if(btcAddress.length>20&&(!existingSession||existingSession.pending)){
 saveSession({pending:true,btcAddress:btcAddress,savedAt:Date.now()});
 console.log('[Session] BTC address auto-saved:',btcAddress.substring(0,10)+'...');
 }
-});
+initReferralSystem()});
 }
 
 console.log('[Session] Initializing Google...');
@@ -514,6 +607,9 @@ console.warn('BACKEND_URL not configured. Edit frontend/config.js with your Rend
 (async function init(){
 log('SYSTEM INIT');
 checkSavedSession();
+initReferralSystem();
+initDonateSystem();
+initAdBanner();
 var url=window.BACKEND_URL||'';
 if(url.indexOf('YOUR-RENDER')>=0||url.indexOf('REPLACE')>=0){
 log('BACKEND NOT CONFIGURED — EDIT frontend/config.js');

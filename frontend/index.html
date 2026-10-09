@@ -172,6 +172,49 @@
 </div>
 </section>
 
+<section class="panel" id="panelReferral">
+<div class="panel-head">Referidos</div>
+<div class="referral-wrap">
+<div class="referral-info">
+<div class="referral-label">Tu Link de Referido</div>
+<div class="referral-link-row">
+<input type="text" id="referralLink" class="referral-input" readonly>
+<button id="copyReferral" class="btn btn-copy">Copiar</button>
+</div>
+<div class="referral-stats">
+<span class="referral-stat">Referidos: <strong id="referralCount">0</strong></span>
+<span class="referral-stat">Mineros activos: <strong id="referralActive">0</strong></span>
+</div>
+</div>
+</div>
+</section>
+
+<section class="panel panel-donate" id="panelDonate">
+<div class="panel-head">Apoyar el Pool</div>
+<div class="donate-wrap">
+<div class="donate-info">
+<div class="donate-label">Donar BTC al Pool</div>
+<div class="donate-desc">Las donaciones financian mejoras del pool y recompensas para mineros activos</div>
+<div class="donate-address-row">
+<input type="text" id="donateAddress" class="donate-input" readonly>
+<button id="copyDonate" class="btn btn-copy">Copiar</button>
+</div>
+<div class="donate-qr-wrap" id="donateQrWrap">
+<canvas id="donateQr" width="120" height="120"></canvas>
+</div>
+</div>
+</div>
+</section>
+
+<div class="ad-banner-wrap" id="adBannerWrap">
+<div class="ad-banner" id="adBanner">
+<div class="ad-placeholder">
+<span class="ad-label">Publicidad</span>
+<span class="ad-text">Configura A-Ads para monetizar el pool</span>
+</div>
+</div>
+</div>
+
 <section class="panel panel-log" id="panelLog">
 <div class="panel-head">Log</div>
 <div class="log-terminal" id="log" role="log" aria-live="polite">&gt; SYSTEM READY</div>
