@@ -3,9 +3,9 @@
   "version": "5.1.1",
   "private": true,
   "description": "Bitcoin Core mainnet CPU solo-mining pool dashboard and browser worker",
-  "main": "server.js",
+  "main": "server.v5-definitive.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node server.v5-definitive.js",
     "test": "node test/sha256d.test.js && node test/midstate.test.js && node test/serialization.test.js && node test/core.test.js && node test/address-validator.test.js && node test/account-manager.test.js && node test/reward-engine.test.js && node test/block-monitor.test.js && node test/e2e.test.js && node test/payout-processor.test.js && node test/payout-monitor.test.js && node test/payout-recovery.test.js && node test/test-payout-runner.test.js && node test/audit.test.js && node test/pool-modules.test.js",
     "test:pool": "node test/pool-protocol.test.js",
     "test:integration": "node test/integration.test.js",

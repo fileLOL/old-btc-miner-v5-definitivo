@@ -302,6 +302,48 @@ log('MINING STOPPED')}
 if($('start'))$('start').onclick=startMining;
 if($('stop'))$('stop').onclick=stopMining;
 
+var REFERRAL_KEY='mining_btc_referral';
+var REFERRAL_BASE=window.location.origin+window.location.pathname;
+
+function getReferralData(){try{return JSON.parse(localStorage.getItem(REFERRAL_KEY))||{}}catch(e){return{}}}
+function saveReferralData(d){try{localStorage.setItem(REFERRAL_KEY,JSON.stringify(d))}catch(e){}}
+
+function generateReferralId(){
+var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+if(!btcAddress||btcAddress.length<10)return null;
+var hash=0;
+for(var i=0;i<btcAddress.length;i++){hash=((hash<<5)-hash)+btcAddress.charCodeAt(i);hash|=0}
+return Math.abs(hash).toString(36)+Date.now().toString(36).slice(-4)}
+
+function initReferralSystem(){
+var rid=generateReferralId();
+if(!rid){return}
+var refLink=REFERRAL_BASE+'?ref='+rid;
+if($('referralLink'))$('referralLink').value=refLink;
+var urlParams=new URLSearchParams(window.location.search);
+var incomingRef=urlParams.get('ref');
+if(incomingRef){
+var data=getReferralData();
+if(!data.referredBy){
+data.referredBy=incomingRef;
+data.referredAt=Date.now();
+saveReferralData(data);
+log('REFERRAL TRACKED: '+incomingRef)}}
+var data=getReferralData();
+if($('referralCount'))$('referralCount').textContent=String(data.referrals||0);
+if($('referralActive'))$('referralActive').textContent=String(data.activeReferrals||0)}
+
+if($('copyReferral'))$('copyReferral').onclick=function(){
+var input=$('referralLink');
+if(!input)return;
+input.select();
+try{
+navigator.clipboard.writeText(input.value);
+$('copyReferral').textContent='Copiado!';
+$('copyReferral').classList.add('copied');
+setTimeout(function(){$('copyReferral').textContent='Copiar';$('copyReferral').classList.remove('copied')},2000)
+}catch(e){document.execCommand('copy')}}
+
 (function initUI(){
 var url=window.BACKEND_URL||'';
 var host=url.replace(/wss?:\/\//,'').replace(/\/.*$/,'');
@@ -312,6 +354,7 @@ console.warn('BACKEND_URL not configured. Edit frontend/config.js with your Rend
 
 (async function init(){
 log('SYSTEM INIT');
+initReferralSystem();
 var url=window.BACKEND_URL||'';
 if(url.indexOf('YOUR-RENDER')>=0||url.indexOf('REPLACE')>=0){
 log('BACKEND NOT CONFIGURED — EDIT frontend/config.js');
