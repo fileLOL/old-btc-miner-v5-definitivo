@@ -8,11 +8,27 @@
   ],
   "routes": [
     {
+      "src": "/sw\\.js",
+      "dest": "/frontend/sw.js",
+      "headers": {
+        "Cache-Control": "public, max-age=0, must-revalidate"
+      }
+    },
+    {
       "src": "/(.*)",
       "dest": "/frontend/$1"
     }
   ],
   "headers": [
+    {
+      "source": "/(app|sha256d|worker|config|style)\\.(js|css)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [

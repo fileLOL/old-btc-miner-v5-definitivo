@@ -4,11 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mining BTC</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=5">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#f7931a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MiningBTC">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="/config.js"></script>
+<script src="/config.js?v=5"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -31,163 +38,237 @@
 
 <main class="main">
 
-<div class="stats-row">
-<div class="stat-card">
-<div class="stat-icon">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+<section class="panel" id="panelBlockchain">
+<div class="panel-head">Blockchain</div>
+<div class="panel-grid-4">
+<div class="data-cell">
+<div class="data-label">Block Height</div>
+<div class="data-value highlight" id="blocks">---</div>
 </div>
-<div class="stat-info">
-<span class="stat-label">Precio BTC</span>
-<span class="stat-value highlight" id="blocks">---</span>
-<span class="stat-change positive">+2.34%</span>
+<div class="data-cell">
+<div class="data-label">Network</div>
+<div class="data-value" id="network">---</div>
 </div>
-<div class="stat-chart"><svg viewBox="0 0 80 30"><polyline points="0,25 15,20 30,22 45,12 60,15 80,5" fill="none" stroke="#22c55e" stroke-width="2"/></svg></div>
+<div class="data-cell">
+<div class="data-label">Difficulty</div>
+<div class="data-value mono" id="difficulty">---</div>
 </div>
-<div class="stat-card">
-<div class="stat-icon">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-</div>
-<div class="stat-info">
-<span class="stat-label">Último bloque</span>
-<span class="stat-value" id="difficulty">---</span>
-<span class="stat-sub" id="prev">hace -- minutos</span>
+<div class="data-cell">
+<div class="data-label">Network Hashrate</div>
+<div class="data-value mono" id="hashrate">---</div>
 </div>
 </div>
-<div class="stat-card">
-<div class="stat-icon">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-</div>
-<div class="stat-info">
-<span class="stat-label">Hashrate de la red</span>
-<span class="stat-value" id="hashrate">---</span>
-<span class="stat-change positive">+1.8%</span>
-</div>
-<div class="stat-chart"><svg viewBox="0 0 80 30"><polyline points="0,20 20,18 40,15 55,17 80,8" fill="none" stroke="#22c55e" stroke-width="2"/></svg></div>
-</div>
-</div>
+</section>
 
-<div class="grid-row">
-
-<div class="left-col">
-
-<div class="section-label">Red</div>
-<div class="card-row">
-<div class="info-card">
-<span class="info-label">BLOCKCHAIN</span>
-<div class="info-grid">
-<div class="info-item"><span class="info-item-label">Altura</span><span class="info-item-value highlight" id="blocks2">---</span></div>
-<div class="info-item"><span class="info-item-label">Red</span><span class="info-item-value" id="network">---</span></div>
-<div class="info-item"><span class="info-item-label">Dificultad</span><span class="info-item-value mono" id="difficulty2">---</span></div>
-<div class="info-item"><span class="info-item-label">Hashrate</span><span class="info-item-value mono" id="hashrate2">---</span></div>
+<section class="panel panel-mining" id="panelMining">
+<div class="panel-head">Mining</div>
+<div class="panel-grid-4">
+<div class="data-cell">
+<div class="data-label">Miner Status</div>
+<div class="data-value status-mining" id="minerStatus">IDLE</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Workers</div>
+<div class="data-value" id="workerCount">0</div>
+</div>
+<div class="data-cell">
+<div class="data-label">My Hashrate</div>
+<div class="data-value highlight" id="minerHashrate">0 H/s</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Current Job</div>
+<div class="data-value mono" id="templateHeight">---</div>
 </div>
 </div>
-<div class="info-card">
-<span class="info-label">NODE</span>
-<div class="info-grid">
-<div class="info-item"><span class="info-item-label">Conexión</span><span class="info-item-value" id="nodeConnection">WebSocket: DISCONNECTED</span></div>
-<div class="info-item"><span class="info-item-label">Backend</span><span class="info-item-value mono small" id="backendUrl">UNKNOWN</span></div>
-<div class="info-item"><span class="info-item-label">Bitcoin</span><span class="info-item-value" id="bitcoinNetwork">UNKNOWN</span></div>
-<div class="info-item"><span class="info-item-label">Bitcoin Core</span><span class="info-item-value" id="bitcoinCore">UNKNOWN</span></div>
+<div class="panel-grid-2">
+<div class="data-cell">
+<div class="data-label">Accepted Shares</div>
+<div class="data-value accepted" id="myShares">0</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Rejected Shares</div>
+<div class="data-value rejected" id="rejectedShares">0</div>
 </div>
 </div>
-</div>
-
-<div class="section-label">Bloque Actual</div>
-<div class="info-card">
-<span class="info-label">CURRENT JOB</span>
-<div class="info-grid">
-<div class="info-item"><span class="info-item-label">Altura</span><span class="info-item-value mono" id="tHeight2">---</span></div>
-<div class="info-item"><span class="info-item-label">Bloque anterior</span><span class="info-item-value mono truncate" id="prev2">---</span></div>
-<div class="info-item"><span class="info-item-label">Bits</span><span class="info-item-value mono" id="bits">---</span></div>
-<div class="info-item"><span class="info-item-label">Target</span><span class="info-item-value mono truncate" id="target2">---</span></div>
-<div class="info-item"><span class="info-item-label">Transacciones</span><span class="info-item-value" id="txcount2">---</span></div>
-<div class="info-item"><span class="info-item-label">Coinbase</span><span class="info-item-value mono" id="coinbase">---</span></div>
-</div>
-</div>
-
-</div>
-
-<div class="right-col">
-
-<div class="section-label">Minería</div>
-<div class="info-card">
-<span class="info-label">MINING</span>
-<div class="info-grid">
-<div class="info-item"><span class="info-item-label">Estado</span><span class="info-item-value status-mining" id="minerStatus">IDLE</span></div>
-<div class="info-item"><span class="info-item-label">Workers</span><span class="info-item-value" id="workerCount">0</span></div>
-<div class="info-item"><span class="info-item-label">Mi Hashrate</span><span class="info-item-value highlight" id="minerHashrate">0 H/s</span></div>
-<div class="info-item"><span class="info-item-label">Trabajo actual</span><span class="info-item-value mono" id="templateHeight">---</span></div>
-<div class="info-item"><span class="info-item-label">Shares aceptados</span><span class="info-item-value accepted" id="myShares">0</span></div>
-<div class="info-item"><span class="info-item-label">Shares rechazados</span><span class="info-item-value rejected" id="rejectedShares">0</span></div>
-</div>
-</div>
-
-<div class="info-card">
-<span class="info-label">POOL</span>
-<div class="info-grid">
-<div class="info-item"><span class="info-item-label">Mineros online</span><span class="info-item-value" id="minersOnline">0</span></div>
-<div class="info-item"><span class="info-item-label">Pool Hashrate</span><span class="info-item-value mono" id="poolHashrate">0 H/s</span></div>
-<div class="info-item"><span class="info-item-label">Bloques válidos</span><span class="info-item-value highlight" id="validBlocks">0</span></div>
-<div class="info-item"><span class="info-item-label">Recompensa</span><span class="info-item-value" id="lastReward">0 BTC</span></div>
-</div>
-</div>
-
-<div class="info-card referral-card" id="panelReferral">
-<span class="info-label">REFERIDOS</span>
-<div class="referral-info">
-<div class="referral-label">Tu Link de Referido</div>
-<div class="referral-link-row">
-<input type="text" id="referralLink" class="referral-input" readonly>
-<button id="copyReferral" class="btn-copy">Copiar</button>
-</div>
-<div class="referral-stats">
-<span class="referral-stat">Referidos: <strong id="referralCount">0</strong></span>
-<span class="referral-stat">Activos: <strong id="referralActive">0</strong></span>
-</div>
-</div>
-</div>
-
-<div class="mining-card">
 <div class="wallet-row">
-<label class="wallet-label" for="btcAddress">Dirección BTC</label>
+<label class="wallet-label" for="btcAddress">Miner BTC</label>
 <div class="wallet-input-wrap">
 <input type="text" id="btcAddress" placeholder="bc1q..." class="wallet-input" autocomplete="off" spellcheck="false" aria-label="Bitcoin wallet address">
 </div>
 </div>
 <div class="controls">
-<button id="start" class="btn btn-primary" aria-label="Start mining">Iniciar Minería</button>
-<button id="stop" class="btn btn-stop" aria-label="Stop mining">Detener</button>
+<button id="start" class="btn btn-primary" aria-label="Start mining">Start Mining</button>
+<button id="stop" class="btn btn-stop" aria-label="Stop mining">Stop Mining</button>
+</div>
+</section>
+
+<section class="panel" id="panelPool">
+<div class="panel-head">Pool</div>
+<div class="panel-grid-4">
+<div class="data-cell">
+<div class="data-label">Miners Online</div>
+<div class="data-value" id="minersOnline">0</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Pool Hashrate</div>
+<div class="data-value mono" id="poolHashrate">0 H/s</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Valid Blocks</div>
+<div class="data-value highlight" id="validBlocks">0</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Reward</div>
+<div class="data-value" id="lastReward">0 BTC</div>
+</div>
+</div>
+</section>
+
+<section class="panel" id="panelJob">
+<div class="panel-head">Current Job</div>
+<div class="panel-grid-3">
+<div class="data-cell">
+<div class="data-label">Height</div>
+<div class="data-value mono" id="tHeight">---</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Previous Block</div>
+<div class="data-value mono truncate" id="prev">---</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Bits</div>
+<div class="data-value mono" id="bits">---</div>
+</div>
+</div>
+<div class="panel-grid-3">
+<div class="data-cell">
+<div class="data-label">Target</div>
+<div class="data-value mono truncate" id="target">---</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Tx Count</div>
+<div class="data-value" id="txcount">---</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Coinbase</div>
+<div class="data-value mono" id="coinbase">---</div>
+</div>
+</div>
+</section>
+
+<section class="panel" id="panelNode">
+<div class="panel-head">Node</div>
+<div class="panel-grid-4">
+<div class="data-cell">
+<div class="data-label">Node Connection</div>
+<div class="data-value" id="nodeConnection">WebSocket: DISCONNECTED</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Backend</div>
+<div class="data-value mono small" id="backendUrl">UNKNOWN</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Bitcoin</div>
+<div class="data-value" id="bitcoinNetwork">UNKNOWN</div>
+</div>
+<div class="data-cell">
+<div class="data-label">Bitcoin Core</div>
+<div class="data-value" id="bitcoinCore">UNKNOWN</div>
+</div>
+</div>
+</section>
+
+<section class="panel" id="panelReferral">
+<div class="panel-head">Referidos</div>
+<div class="referral-wrap">
+<div class="referral-info">
+<div class="referral-label">Tu Link de Referido</div>
+<div class="referral-link-row">
+<input type="text" id="referralLink" class="referral-input" readonly>
+<button id="copyReferral" class="btn btn-copy">Copiar</button>
+</div>
+<div class="referral-stats">
+<span class="referral-stat">Referidos: <strong id="referralCount">0</strong></span>
+<span class="referral-stat">Mineros activos: <strong id="referralActive">0</strong></span>
+</div>
+</div>
+</div>
+</section>
+
+<section class="panel panel-donate" id="panelDonate">
+<div class="panel-head">Apoyar el Pool</div>
+<div class="donate-wrap">
+<div class="donate-info">
+<div class="donate-label">Donar BTC al Pool</div>
+<div class="donate-desc">Las donaciones financian mejoras del pool y recompensas para mineros activos</div>
+<div class="donate-address-row">
+<input type="text" id="donateAddress" class="donate-input" readonly>
+<button id="copyDonate" class="btn btn-copy">Copiar</button>
+</div>
+<div class="donate-qr-wrap" id="donateQrWrap">
+<canvas id="donateQr" width="120" height="120"></canvas>
+</div>
+</div>
+</div>
+</section>
+
+<div class="ad-banner-wrap" id="adBannerWrap">
+<div class="ad-banner" id="adBanner">
+<div class="ad-placeholder">
+<span class="ad-label">Publicidad</span>
+<span class="ad-text">Configura A-Ads para monetizar el pool</span>
+</div>
 </div>
 </div>
 
-</div>
-
-</div>
-
-<div class="table-card">
-<div class="table-header">Bloques recientes</div>
-<div class="table-wrap">
-<table class="data-table">
-<thead>
-<tr><th>Altura</th><th>Hash (parcial)</th><th>Transacciones</th><th>Tamaño</th><th>Tiempo</th></tr>
-</thead>
-<tbody id="blocksTableBody">
-<tr><td id="tHeight">---</td><td class="mono truncate" id="target">---</td><td id="txcount">---</td><td>---</td><td>---</td></tr>
-</tbody>
-</table>
-</div>
-</div>
-
-<div class="log-card">
-<div class="log-title">Log del sistema</div>
+<section class="panel panel-log" id="panelLog">
+<div class="panel-head">Log</div>
 <div class="log-terminal" id="log" role="log" aria-live="polite">&gt; SYSTEM READY</div>
-</div>
+</section>
 
 </main>
 
+<footer class="footer-legal">
+<div class="footer-legal-content">
+<div class="footer-left">
+<span class="footer-copyleft">Ⓒ Copyleft Appscat</span>
+<button id="downloadApp" class="btn-download-small" aria-label="Download app">Descargar App</button>
+</div>
+<nav class="footer-links">
+<a href="/terms.html" class="footer-link">Términos de Uso</a>
+<a href="/privacy.html" class="footer-link">Política de Privacidad</a>
+</nav>
+</div>
+</footer>
+
+<div id="sessionOverlay" class="session-overlay" style="display:none">
+<div class="session-popup">
+<div class="session-icon">
+<svg width="48" height="48" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15" fill="#f7931a"/><path d="M21.2 13.6c.3-2-1.2-3.1-3.3-3.8l.7-2.7-1.6-.4-.7 2.6c-.4-.1-.9-.2-1.3-.3l.7-2.7-1.6-.4-.7 2.7c-.4-.1-.7-.2-1.1-.3l0 0-2.2-.6-.4 1.7s1.2.3 1.2.3c.6.2.8.6.7 1l-.7 2.9c0 0 .1 0 .1.1h-.1l-1 4c-.1.2-.3.6-.8.4 0 0-1.2-.3-1.2-.3l-.8 1.8 2.1.5c.4.1.8.2 1.1.3l-.7 2.8 1.6.4.7-2.7c.5.1.9.2 1.3.3l-.7 2.7 1.6.4.7-2.8c2.9.5 5 .3 5.9-2.3.7-2.1 0-3.3-1.5-4.1 1.1-.2 1.9-.9 2.1-2.3zm-3.8 5.3c-.5 2.1-4 1-5.1.7l.9-3.7c1.1.3 4.7.8 4.2 3zm.5-5.3c-.5 1.9-3.4.9-4.3.7l.8-3.3c1 .2 4.1.7 3.5 2.6z" fill="#fff"/></svg>
+</div>
+<div class="session-title" id="sessionTitle"></div>
+<div class="session-subtitle" id="sessionSubtitle"></div>
+<div class="session-buttons" id="sessionButtons"></div>
+<div id="googleBtnContainer" style="display:none"></div>
+</div>
 </div>
 
-<script src="/sha256d.js"></script>
-<script src="/app.js"></script>
+</div>
+
+<script src="/sha256d.js?v=5"></script>
+<script src="/app.js?v=5"></script>
+<script>
+(function(){
+if('serviceWorker' in navigator){
+navigator.serviceWorker.getRegistrations().then(function(regs){
+for(var i=0;i<regs.length;i++){regs[i].unregister()}
+});
+caches.keys().then(function(names){for(var i=0;i<names.length;i++){caches.delete(names[i])}})
+});
+navigator.serviceWorker.register('/sw.js?v=5').catch(function(){})
+}
+})();
+</script>
+
 </body>
 </html>

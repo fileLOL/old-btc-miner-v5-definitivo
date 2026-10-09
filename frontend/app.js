@@ -142,12 +142,13 @@ height:j.height,
 header:j.header,
 midstate:j.midstate,
 target:j.blockTarget||j.target,
-shareTarget:j.shareTarget,
+shareTarget:j.shareTarget||null,
 bodyHex:j.bodyHex||'',
 bits:j.bits||null,
 previousblockhash:j.previousblockhash||null,
 coinbasevalue:j.coinbasevalue||null
 };
+console.log('[Job] Stored job:',{jobId:j.jobId,height:j.height,hasShareTarget:!!j.shareTarget,shareTarget:j.shareTarget?JSON.stringify(j.shareTarget).slice(0,50):'null'});
 if($('templateHeight'))$('templateHeight').textContent=j.height;
 if($('tHeight'))$('tHeight').textContent=j.height;
 if($('tHeight2'))$('tHeight2').textContent=j.height;
@@ -186,8 +187,9 @@ if(ws&&ws.readyState===1&&minerId){try{ws.send(JSON.stringify({type:'hashrate',h
 }}
 else if(m.type==='share'){
 if(ws&&ws.readyState===1){
-try{ws.send(JSON.stringify({type:'share',minerId:minerId,jobId:m.jobId,nonce:m.nonce,hashHex:m.hash}))}catch(e){}}
-else{myShares++;if($('myShares'))$('myShares').textContent=myShares.toString()}
+console.log('[Share] Sending to server:',m.nonce);
+try{ws.send(JSON.stringify({type:'share',minerId:minerId,jobId:m.jobId,nonce:m.nonce,hashHex:m.hash}))}catch(e){console.error('[Share] Send error:',e)}}
+else{myShares++;console.log('[Share] Counted locally (no WS):',myShares);if($('myShares'))$('myShares').textContent=myShares.toString()}
 }
 else if(m.type==='nonce'){
 if(!running)return;
@@ -249,8 +251,8 @@ else if(msg.type==='newJob'){
 storeJob(msg);
 if(running){stopWorkers();startWorkers()}
 log('NEW JOB: '+msg.height)}
-else if(msg.type==='shareAccepted'){myShares++;if($('myShares'))$('myShares').textContent=myShares.toString()}
-else if(msg.type==='shareRejected'){rejectedCount++;if($('rejectedShares'))$('rejectedShares').textContent=rejectedCount.toString();log('SHARE REJECTED: '+(msg.reason||''))}
+else if(msg.type==='shareAccepted'){myShares++;console.log('[Shares] Accepted:',myShares);if($('myShares'))$('myShares').textContent=myShares.toString()}
+else if(msg.type==='shareRejected'){rejectedCount++;console.log('[Shares] Rejected:',rejectedCount);if($('rejectedShares'))$('rejectedShares').textContent=rejectedCount.toString();log('SHARE REJECTED: '+(msg.reason||''))}
 else if(msg.type==='poolStats'){updatePoolUI(msg)}
 else if(msg.type==='blockFound'){log('BLOCK FOUND BY '+msg.minerId+' AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK FOUND!')}
 else if(msg.type==='blockAccepted'){log('BLOCK ACCEPTED AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK ACCEPTED!')}
@@ -504,9 +506,12 @@ for(var i=0;i<seed.length;i++){hash=((hash<<5)-hash)+seed.charCodeAt(i);hash|=0}
 return Math.abs(hash).toString(36)+Date.now().toString(36).slice(-4)}
 
 function initReferralSystem(){
+console.log('[Referral] Initializing referral system...');
 var rid=generateReferralId();
 var refLink=REFERRAL_BASE+'?ref='+rid;
-if($('referralLink'))$('referralLink').value=refLink;
+console.log('[Referral] Generated link:',refLink);
+if($('referralLink')){$('referralLink').value=refLink;console.log('[Referral] Link set in input')}
+else{console.warn('[Referral] referralLink element not found')}
 var urlParams=new URLSearchParams(window.location.search);
 var incomingRef=urlParams.get('ref');
 if(incomingRef){

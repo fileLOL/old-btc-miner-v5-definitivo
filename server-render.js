@@ -533,30 +533,37 @@ function handleMessage(ws, minerId, msg) {
   }
 
   else if (msg.type === 'share') {
+    console.log(`[Share] Received from ${minerId}:`, { jobId: msg.jobId, nonce: msg.nonce });
     if (!ws.registered) {
+      console.log(`[Share] Rejected: wallet registration required for ${minerId}`);
       ws.send(JSON.stringify({ type: 'shareRejected', reason: 'wallet registration required' }));
       return
     }
-    if (!rateLimiter.check(minerId, 'share')) { ws.send(JSON.stringify({ type: 'error', error: 'Share rate limit' })); return }
+    if (!rateLimiter.check(minerId, 'share')) { console.log(`[Share] Rate limited: ${minerId}`); ws.send(JSON.stringify({ type: 'error', error: 'Share rate limit' })); return }
     const result = shareValidator.validate({ minerId, jobId: msg.jobId, nonce: msg.nonce, hashHex: msg.hashHex });
+    console.log(`[Share] Validation result for ${minerId}:`, { valid: result.valid, stale: result.stale, meetsTarget: result.meetsShareTarget });
     if (!result.valid) {
       minerTracker.addInvalidShare(minerId);
+      console.log(`[Share] Invalid: ${result.error}`);
       ws.send(JSON.stringify({ type: 'shareRejected', reason: result.error, stale: result.stale }));
       return
     }
     if (result.stale) {
       minerTracker.addStaleShare(minerId);
+      console.log(`[Share] Stale job`);
       ws.send(JSON.stringify({ type: 'shareRejected', reason: 'stale', stale: true }));
       return
     }
     if (!result.meetsShareTarget) {
       minerTracker.addInvalidShare(minerId);
+      console.log(`[Share] Does not meet share target`);
       ws.send(JSON.stringify({ type: 'shareRejected', reason: 'does not meet share target' }));
       return
     }
     minerTracker.addShare(minerId, { jobId: result.jobId, nonce: result.nonce, hashHex: result.hashHex, difficulty: config.SHARE_DIFFICULTY || 1 });
     const miner = minerTracker.getMiner(minerId);
     if (miner && miner.accountId) { AuditLog.logShare(miner.accountId, result.jobId, config.SHARE_DIFFICULTY || 1) }
+    console.log(`[Share] Accepted from ${minerId}`);
     ws.send(JSON.stringify({ type: 'shareAccepted', jobId: result.jobId, nonce: result.nonce }));
     if (stratumClient && stratumClient.connected) {
       stratumClient.submitBrowserShare(result.jobId, result.nonce, result.hashHex, result.meetsBlockTarget);
