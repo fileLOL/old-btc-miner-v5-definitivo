@@ -5,7 +5,7 @@ services:
     region: frankfurt
     plan: free
     buildCommand: npm install
-    startCommand: node server-render.js
+    startCommand: node server.js
     envVars:
       - key: NODE_ENV
         value: production
