@@ -1,0 +1,20 @@
+{
+  "name": "Mining BTC - Pool de Mineria",
+  "short_name": "MiningBTC",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#f7931a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "utilities"],
+  "description": "Pool de minería de Bitcoin en navegador",
+  "lang": "es"
+}

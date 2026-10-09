@@ -301,20 +301,13 @@ log('MINING STOPPED')}
 
 if($('start'))$('start').onclick=startMining;
 if($('stop'))$('stop').onclick=function(){stopMining();askSaveSession()};
+var deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferredPrompt=e});
 if($('downloadApp'))$('downloadApp').onclick=function(){
-var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Mining BTC</title></head><body>';
-html+='<h1>Mining BTC</h1><p>App descargada correctamente.</p>';
-html+='</body></html>';
-var blob=new Blob([html],{type:'text/html'});
-var url=URL.createObjectURL(blob);
-var a=document.createElement('a');
-a.href=url;
-a.download='MiningBTC.html';
-document.body.appendChild(a);
-a.click();
-document.body.removeChild(a);
-URL.revokeObjectURL(url);
-log('APP DESCARGADA');
+if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(function(r){deferredPrompt=null});return}
+var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+if(isIOS&&!navigator.standalone){log('iOS: Pulsa Compartir > "Añadir a pantalla de inicio"');return}
+log('APP NO DISPONIBLE PARA INSTALAR');
 };
 
 var GOOGLE_CLIENT_ID='46928798077-vtsu6fln277j6s601n2b4feg1hrsfi72.apps.googleusercontent.com';
