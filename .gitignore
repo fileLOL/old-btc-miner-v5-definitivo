@@ -25,3 +25,9 @@ FASE3-IMPLEMENTATION-REPORT.md
 
 .vercel
 .env*
+
+# Backups y archivos de recuperación
+backup-before-security-fixes/
+backup-bitcoin-core-config
+backup-frontend-pre-phase-c/
+recovery-phase-d/

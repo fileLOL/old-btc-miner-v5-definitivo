@@ -25,16 +25,33 @@ const app=express();
 const server=http.createServer(app);
 const PORT=config.PORT;
 
+const ALLOWED_ORIGINS=(process.env.ALLOWED_ORIGINS||'https://mining-btc.vercel.app').split(',').map(s=>s.trim()).filter(Boolean);
+
+function isOriginAllowed(origin){
+if(!origin)return false;
+if(ALLOWED_ORIGINS.includes(origin))return true;
+try{
+const url=new URL(origin);
+if(url.protocol==='http:'&&(url.hostname==='localhost'||url.hostname==='127.0.0.1'))return true;
+}catch(e){}
+return false}
+
 app.use((req,res,next)=>{
-const origin=config.CORS_ORIGIN;
-if(origin==='*'){res.header('Access-Control-Allow-Origin','*')}
-else if(origin&&origin.split(',').map(s=>s.trim()).includes(req.headers.origin)){res.header('Access-Control-Allow-Origin',req.headers.origin)}
+const origin=req.headers.origin;
+if(isOriginAllowed(origin)){
+res.header('Access-Control-Allow-Origin',origin);
+res.header('Vary','Origin')}
 res.header('Access-Control-Allow-Methods','GET,POST,OPTIONS');
 res.header('Access-Control-Allow-Headers','Content-Type,Authorization');
+res.header('X-Content-Type-Options','nosniff');
+res.header('X-Frame-Options','DENY');
+res.header('X-XSS-Protection','1; mode=block');
+res.header('Referrer-Policy','strict-origin-when-cross-origin');
 if(req.method==='OPTIONS')return res.sendStatus(200);
 next()});
 
 app.use(express.json({limit:'16mb'}));
+app.use(httpRateLimit);
 app.use(express.static(path.join(__dirname,'frontend')));
 
 let db;
@@ -66,6 +83,38 @@ const session=authenticateRequest(req);
 if(!session)return null;
 if(!session.googleId)return null;
 return session}
+
+let _adminToken=config.ADMIN_TOKEN;
+if(!_adminToken){_adminToken=crypto.randomBytes(32).toString('hex');console.warn('[Security] ADMIN_TOKEN not set in .env. Generated token for this session. Set ADMIN_TOKEN in .env for persistence.')}
+config.ADMIN_TOKEN=_adminToken;
+
+function authenticateAdmin(req){
+const auth=req.headers.authorization||'';
+if(!auth.startsWith('Bearer '))return false;
+const token=auth.slice(7);
+if(!token||token.length!==64||!/^[0-9a-f]{64}$/.test(token))return false;
+return crypto.timingSafeEqual(Buffer.from(token),Buffer.from(_adminToken))}
+
+const _httpRateMap=new Map();
+const _httpRateCleanup=setInterval(()=>{const now=Date.now();for(const[k,w]of _httpRateMap){if(now-w.reset>120000)_httpRateMap.delete(k)}},60000);
+if(_httpRateCleanup.unref)_httpRateCleanup.unref();
+
+function getClientIP(req){
+return req.headers['x-tailscale-client-ip']||
+req.headers['x-forwarded-for']?.split(',')[0]?.trim()||
+req.ip||
+req.connection.remoteAddress||
+'unknown'}
+
+function httpRateLimit(req,res,next){
+const ip=getClientIP(req);
+const now=Date.now();
+const key='http_'+ip;
+let w=_httpRateMap.get(key);
+if(!w||now-w.reset>60000){w={count:0,reset:now};_httpRateMap.set(key,w)}
+w.count++;
+if(w.count>120){res.status(429).json({ok:false,error:'rate limit exceeded'});return}
+next()}
 
 blockMonitor.onRewardsApplied=function(block,rewardsResult){
 for(const reward of rewardsResult.rewards){
@@ -145,6 +194,7 @@ r.json({ok:true,chain:i.chain,blocks:i.blocks,headers:i.headers,verificationprog
 catch(e){r.status(503).json({ok:false,error:e.message})}});
 
 app.get('/api/wallet',async(_q,r)=>{
+if(!authenticateAdmin(_q)){return r.status(401).json({ok:false,error:'admin auth required'})}
 try{
 const w=JSON.parse(await btcCli(['getwalletinfo']));
 const bal=typeof w.balance==='number'?w.balance:null;
@@ -195,6 +245,7 @@ res.json({ok:true,result:result||'accepted'})}
 catch(e){res.status(400).json({ok:false,error:e.message})}});
 
 app.post('/api/send',async(req,res)=>{
+if(!authenticateAdmin(req)){return res.status(401).json({ok:false,error:'admin auth required'})}
 if(process.env.ENABLE_SEND!=='1')return res.status(403).json({ok:false,error:'Wallet send disabled. Set ENABLE_SEND=1 explicitly.'});
 const{address,amount,subtractFeeFromAmount=false}=req.body||{};
 const value=Number(amount);
@@ -235,20 +286,26 @@ const stats=minerTracker.getMinerStats(minerId);
 if(!stats.accountId){
 return res.json({ok:true,registered:false,minerId,shares:stats.shares,hashrate:stats.hashrate,lastSeen:stats.lastSeen})}
 const account=accountManager.getAccount(stats.accountId);
-const balance=accountManager.getBalance(stats.accountId);
 const totalShares=accountManager.getShareCountByAccount(stats.accountId);
-res.json({ok:true,registered:true,minerId,accountId:stats.accountId,btcAddress:account?account.btc_address:null,shares:stats.shares,totalShares,hashrate:stats.hashrate,lastSeen:stats.lastSeen,balance:balance?{confirmed_sat:balance.confirmed_sat,pending_sat:balance.pending_sat,total_earned_sat:balance.total_earned_sat}:null})}
+const session=authenticateRequest(req);
+if(session&&session.accountId===stats.accountId){
+const balance=accountManager.getBalance(stats.accountId);
+return res.json({ok:true,registered:true,minerId,accountId:stats.accountId,btcAddress:account?account.btc_address:null,shares:stats.shares,totalShares,hashrate:stats.hashrate,lastSeen:stats.lastSeen,balance:balance?{confirmed_sat:balance.confirmed_sat,pending_sat:balance.pending_sat,total_earned_sat:balance.total_earned_sat}:null})}
+return res.json({ok:true,registered:true,minerId,accountId:stats.accountId,btcAddress:account?account.btc_address:null,shares:stats.shares,totalShares,hashrate:stats.hashrate,lastSeen:stats.lastSeen})}
 catch(e){
 console.error('Get miner stats error:',e.message);
 res.status(500).json({ok:false,error:e.message})}});
 
 app.get('/api/my-stats',(req,res)=>{
+const session=authenticateRequest(req);
+if(!session){return res.status(401).json({ok:false,error:'unauthorized'})}
 try{
 const{minerId}=req.query;
 if(!minerId){return res.status(400).json({ok:false,error:'minerId required'})}
 const miner=minerTracker.getMiner(minerId);
 if(!miner||!miner.accountId){
 return res.status(404).json({ok:false,error:'Miner not found or not registered'})}
+if(miner.accountId!==session.accountId){return res.status(403).json({ok:false,error:'forbidden'})}
 const stats=rewardEngine.getAccountStats(miner.accountId);
 if(!stats){return res.status(404).json({ok:false,error:'Account not found'})}
 const windowStats=rewardEngine.getSharesInWindow(miner.accountId,config.PPLNS_WINDOW_SIZE);
@@ -307,6 +364,7 @@ app.get('/api/health',(_q,r)=>{
 r.json({ok:true,uptime:process.uptime(),miners:minerTracker.getMinerCount(),version:'5.1.0-pool'})});
 
 app.get('/api/payouts',(req,res)=>{
+if(!authenticateAdmin(req)){return res.status(401).json({ok:false,error:'admin auth required'})}
 try{
 const status=req.query.status||'all';
 const limit=parseInt(req.query.limit||'100',10);
@@ -321,12 +379,14 @@ res.json({ok:true,payouts})}
 catch(e){res.status(500).json({ok:false,error:e.message})}});
 
 app.get('/api/payout-stats',(_q,res)=>{
+if(!authenticateAdmin(_q)){return res.status(401).json({ok:false,error:'admin auth required'})}
 try{
 const stats=payoutProcessor.getPayoutStats();
 res.json({ok:true,stats})}
 catch(e){res.status(500).json({ok:false,error:e.message})}});
 
 app.get('/api/audit',(req,res)=>{
+if(!authenticateAdmin(req)){return res.status(401).json({ok:false,error:'admin auth required'})}
 try{
 const accountId=req.query.accountId?parseInt(req.query.accountId,10):null;
 const limit=parseInt(req.query.limit||'100',10);
@@ -335,6 +395,7 @@ res.json({ok:true,audit:trail})}
 catch(e){res.status(500).json({ok:false,error:e.message})}});
 
 app.get('/api/audit/summary',(req,res)=>{
+if(!authenticateAdmin(req)){return res.status(401).json({ok:false,error:'admin auth required'})}
 try{
 const accountId=req.query.accountId?parseInt(req.query.accountId,10):null;
 let summary;
@@ -344,6 +405,7 @@ res.json({ok:true,summary})}
 catch(e){res.status(500).json({ok:false,error:e.message})}});
 
 app.get('/api/admin/test-payout/status',(_q,res)=>{
+if(!authenticateAdmin(_q)){return res.status(401).json({ok:false,error:'admin auth required'})}
 try{
 res.json({ok:true,
 enabled:config.ENABLE_REAL_PAYOUT_TEST,
@@ -356,19 +418,29 @@ testDbPath:testPayoutRunner.getTestDbPath()})}
 catch(e){res.status(500).json({ok:false,error:e.message})}});
 
 app.post('/api/admin/test-payout/run',async(req,res)=>{
+if(!authenticateAdmin(req)){return res.status(401).json({ok:false,error:'admin auth required'})}
 try{
 const result=await testPayoutRunner.run();
 res.json({ok:result.success!==false,result})}
 catch(e){res.status(500).json({ok:false,error:e.message})}});
 
 app.get('/api/admin/test-payout/state',(_q,res)=>{
+if(!authenticateAdmin(_q)){return res.status(401).json({ok:false,error:'admin auth required'})}
 try{
 const state=testPayoutRunner.getState();
 if(!state)return res.json({ok:true,state:null,message:'test DB not initialised yet'})
 res.json({ok:true,state})}
 catch(e){res.status(500).json({ok:false,error:e.message})}});
 
-const wss=new WebSocket.Server({server,path:'/ws'});
+const wss=new WebSocket.Server({
+server,
+path:'/ws',
+verifyClient:(info)=>{
+const origin=info.origin;
+if(!origin)return true;
+if(isOriginAllowed(origin))return true;
+console.warn(`[WebSocket] Rejected connection from unauthorized origin: ${origin}`);
+return false}});
 
 wss.on('connection',(ws,req)=>{
 const minerId='miner_'+Date.now()+'_'+Math.random().toString(36).slice(2,10);
@@ -625,6 +697,7 @@ console.log('Shutting down...');
 clearInterval(templateInterval);
 clearInterval(broadcastInterval);
 clearInterval(payoutInterval);
+clearInterval(_httpRateCleanup);
 stratumServer.stop();
 minerTracker.destroy();
 rateLimiter.destroy();

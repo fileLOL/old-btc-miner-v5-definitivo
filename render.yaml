@@ -19,8 +19,8 @@ services:
         sync: false
       - key: SHARE_DIFFICULTY
         value: "10000000"
-      - key: CORS_ORIGIN
-        value: "*"
+      - key: ALLOWED_ORIGINS
+        value: "https://mining-btc.vercel.app"
       - key: MAX_MINERS
         value: "100"
       - key: POOL_FEE_PERCENT
