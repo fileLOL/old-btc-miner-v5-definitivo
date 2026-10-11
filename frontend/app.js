@@ -273,7 +273,7 @@ else if(msg.type==='blockRejected'){log('BLOQUE RECHAZADO: '+msg.reason);addActi
 else if(msg.type==='sessionToken'){sessionToken=msg.token;log('SESION AUTENTICADA');if(walletModalOpen)fetchWalletBalance();startWalletPolling()}
 else if(msg.type==='balanceUpdate'){if(walletModalOpen)updateWalletUI(msg);addActivity('balance','Saldo actualizado')}
 else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' acreditado (bloque '+msg.block_height+')','reward');if(walletModalOpen)updateWalletUI(msg);addActivity('reward','Recompensa distribuida',fmtBtc(msg.reward_sat)+' en bloque '+msg.block_height)}
-else if(msg.type==='registerFailed'){registered=false;var reason=msg.error||'Motivo no especificado';log('REGISTRO RECHAZADO: '+reason);if(walletModalOpen)showWalletNotVerified()}
+else if(msg.type==='registerFailed'){registered=false;var reason=msg.error||'Motivo no especificado';log('REGISTRO RECHAZADO: '+reason);}
 else if(msg.type==='error'){log('ERROR: '+msg.error)}
 else if(msg.type==='pong'){}
 };
@@ -559,7 +559,7 @@ headers:{'Authorization':'Bearer '+tokenAtRequest}
 var d={};try{d=await r.json()}catch(e){}
 if(requestId!==walletRequestId||tokenAtRequest!==sessionToken)return;
 if(!r.ok||d.ok===false){
-if(r.status===401){showWalletNotVerified();return}
+if(r.status===401){return}
 return}
 updateWalletUI(d);
 }catch(e){}}
@@ -646,4 +646,3 @@ var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
 if(isIOS&&!navigator.standalone){log('iOS: Pulsa Compartir > Anadir a pantalla de inicio');return}
 log('APP NO DISPONIBLE PARA INSTALAR');
 };
-
