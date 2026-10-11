@@ -205,7 +205,7 @@ app.get('/api/template',async(_q,r)=>{
 try{
 const t=JSON.parse(await btcCli(['getblocktemplate','{"rules":["segwit"]}']));
 if(ibdError)ibdError=null;
-r.json({ok:true,height:t.height,previousblockhash:t.previousblockhash,bits:t.bits,target:t.target,curtime:t.curtime,mintime:t.mintime,transactions:t.transactions?.length||0,coinbasevalue:t.coinbasevalue,raw:t})}
+r.json({ok:true,height:t.height,previousblockhash:t.previousblockhash,bits:t.bits,target:t.target,curtime:t.curtime,mintime:t.mintime,transactions:t.transactions?.length||0,coinbasevalue:t.coinbasevalue})}
 catch(e){
 const msg=e.message||'';
 const isIbd=msg.indexOf('-10')>=0||msg.indexOf('Initial block download')>=0||msg.indexOf('Verifying blocks')>=0;

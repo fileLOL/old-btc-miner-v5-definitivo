@@ -290,12 +290,6 @@ return}
 running=true;
 updateMinerStatusUI('CONECTANDO...');
 addActivity('mining','Iniciando mineria...');
-var base=getBackendHttp();
-if(base){
-try{
-var d=await getJSON(base+'/api/job');
-if(d&&!d.error){storeJob(d);log('TRABAJO OBTENIDO DEL BACKEND')}
-}catch(e){log('ERROR AL OBTENER TRABAJO: '+e.message)}}
 if(!ws||ws.readyState!==1){connectWS()}
 await new Promise(function(r){setTimeout(r,2000)});
 if(!currentJob){
