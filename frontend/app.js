@@ -87,18 +87,24 @@ return d}
 
 async function checkBackend(){
 var base=getBackendHttp();
+console.log('[DIAG] checkBackend called, base=',base);
 if(!base){
 updateNodePanel('DISCONNECTED');
 log('BACKEND_URL NO CONFIGURADO');
 return false}
 try{
+console.log('[DIAG] Fetching:',base+'/api/health');
 var d=await getJSON(base+'/api/health');
+console.log('[DIAG] Health check success:',d);
 if($('led'))$('led').classList.add('on');
 if($('statusText'))$('statusText').textContent='CONECTADO';
 updateNodePanel('CONNECTED');
 backendConnected=true;
 log('BACKEND CONECTADO // v'+(d.version||'?'));
 return true}catch(e){
+console.error('[DIAG] Health check failed:',e);
+console.error('[DIAG] Error name:',e.name);
+console.error('[DIAG] Error message:',e.message);
 if($('led'))$('led').classList.remove('on');
 if($('statusText'))$('statusText').textContent='DESCONECTADO';
 updateNodePanel('DISCONNECTED');
@@ -226,10 +232,15 @@ if(wsReconnectTimer){clearTimeout(wsReconnectTimer);wsReconnectTimer=null}});
 function connectWS(){
 var wsUrl=window.BACKEND_URL||'';
 if(!wsUrl){log('BACKEND_URL NO CONFIGURADO');return}
-if(ws&&ws.readyState<=1){return}
+console.log('[DIAG] connectWS called, wsUrl=',wsUrl);
+console.log('[DIAG] Current ws state:',ws?ws.readyState:'null');
+if(ws&&ws.readyState<=1){console.log('[DIAG] Already connecting/connected, skipping');return}
 if(wsHeartbeatTimer){clearInterval(wsHeartbeatTimer);wsHeartbeatTimer=null}
-try{ws=new WebSocket(wsUrl+'/ws')}catch(e){log('WS FALLIDO: '+e.message);scheduleWsReconnect();return}
+var fullWsUrl=wsUrl+'/ws';
+console.log('[DIAG] Attempting WebSocket connection to:',fullWsUrl);
+try{ws=new WebSocket(fullWsUrl);console.log('[DIAG] WebSocket object created, readyState=',ws.readyState)}catch(e){console.error('[DIAG] WebSocket constructor error:',e);log('WS FALLIDO: '+e.message);scheduleWsReconnect();return}
 ws.onopen=function(){
+console.log('[DIAG] WebSocket onopen fired, readyState=',ws.readyState);
 log('WEBSOCKET CONECTADO');
 updateNodePanel('CONNECTED');
 addActivity('connection','Conectado al servidor');
@@ -239,13 +250,16 @@ wsHeartbeatTimer=setInterval(function(){
 if(ws&&ws.readyState===1){try{ws.send(JSON.stringify({type:'ping'}))}catch(e){}}
 },30000);
 var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+console.log('[DIAG] onopen: btcAddress=',btcAddress?'[set]':'[empty]');
 if(!btcAddress){log('DIRECCION BTC REQUERIDA PARA MINAR');return}
-try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress,googleToken:googleToken}));log('REGISTRANDO...'+(googleToken?' (verificado)':''))}catch(e){log('ERROR REGISTRO: '+e.message)}};
+try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress,googleToken:googleToken}));console.log('[DIAG] Register message sent');log('REGISTRANDO...'+(googleToken?' (verificado)':''))}catch(e){console.error('[DIAG] Register send error:',e);log('ERROR REGISTRO: '+e.message)}};
 ws.onmessage=function(e){
 var msg=JSON.parse(e.data);
+console.log('[DIAG] WebSocket message received:',msg.type);
 if(msg.type==='welcome'){minerId=msg.minerId;log('ID MINERO: '+minerId)}
-else if(msg.type==='registered'){log('REGISTRADO // '+msg.btcAddress+(msg.verified?' // VERIFICADO':''));addActivity('account','Direccion registrada',msg.btcAddress.substring(0,12)+'...')}
+else if(msg.type==='registered'){console.log('[DIAG] Registered message:',msg);log('REGISTRADO // '+msg.btcAddress+(msg.verified?' // VERIFICADO':''));addActivity('account','Direccion registrada',msg.btcAddress.substring(0,12)+'...')}
 else if(msg.type==='newJob'){
+console.log('[DIAG] newJob received:',{jobId:msg.jobId,height:msg.height,hasHeader:!!msg.header});
 storeJob(msg);
 if(running){stopWorkers();startWorkers()}
 addActivity('job','Nuevo trabajo recibido','Bloque '+msg.height)}
@@ -261,7 +275,16 @@ else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' a
 else if(msg.type==='error'){log('ERROR: '+msg.error)}
 else if(msg.type==='pong'){}
 };
-ws.onclose=function(){
+ws.onerror=function(e){
+console.error('[DIAG] WebSocket onerror:',e);
+console.error('[DIAG] WebSocket readyState at error:',ws?ws.readyState:'null');
+log('WS ERROR');
+};
+ws.onclose=function(e){
+console.log('[DIAG] WebSocket onclose fired');
+console.log('[DIAG] Close code:',e.code);
+console.log('[DIAG] Close reason:',e.reason);
+console.log('[DIAG] Close wasClean:',e.wasClean);
 if(wsHeartbeatTimer){clearInterval(wsHeartbeatTimer);wsHeartbeatTimer=null}
 sessionToken=null;
 log('WS DESCONECTADO');
