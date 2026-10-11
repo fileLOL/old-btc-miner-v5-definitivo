@@ -565,14 +565,9 @@ updateWalletUI(d);
 }catch(e){}}
 
 function showWalletNotVerified(){
-if($('walletPending'))$('walletPending').textContent='---';
-if($('walletConfirmed'))$('walletConfirmed').textContent='---';
-if($('walletTotal'))$('walletTotal').textContent='---';
-if($('walletShares'))$('walletShares').textContent='---';
-if($('walletBlocks'))$('walletBlocks').textContent='---';
-if($('walletWindowShares'))$('walletWindowShares').textContent='---';
 var notice=$('walletNotVerified');
-if(notice){notice.style.display='block';notice.textContent='Cuenta no verificada. Inicia sesion con Google para ver tu saldo.'}}
+if(notice)notice.style.display='none';
+}
 
 function updateWalletUI(d){
 if($('walletPending'))$('walletPending').textContent=fmtBtc(d.pending_sat||0);
