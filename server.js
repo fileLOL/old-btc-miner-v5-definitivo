@@ -47,6 +47,8 @@ res.header('X-Content-Type-Options','nosniff');
 res.header('X-Frame-Options','DENY');
 res.header('X-XSS-Protection','1; mode=block');
 res.header('Referrer-Policy','strict-origin-when-cross-origin');
+if(req.headers['access-control-request-private-network']==='true'){
+res.header('Access-Control-Allow-Private-Network','true')}
 if(req.method==='OPTIONS')return res.sendStatus(200);
 next()});
 
@@ -442,6 +444,12 @@ if(isOriginAllowed(origin))return true;
 console.warn(`[WebSocket] Rejected connection from unauthorized origin: ${origin}`);
 return false}});
 
+wss.on('headers',(headers,req)=>{
+headers.push('Access-Control-Allow-Private-Network: true');
+const origin=req.headers.origin;
+if(origin&&isOriginAllowed(origin)){
+headers.push('Access-Control-Allow-Origin: '+origin)}});
+
 wss.on('connection',(ws,req)=>{
 const minerId='miner_'+Date.now()+'_'+Math.random().toString(36).slice(2,10);
 const registered=minerTracker.register(minerId,ws);
@@ -509,9 +517,8 @@ const existingAccount=accountManager.getAccountByAddress(btcAddress);
 if(existingAccount){
 const activeCount=sessionManager.getAccountTokenCount(existingAccount.account_id);
 if(activeCount>0){
-ws.send(JSON.stringify({type:'registerFailed',error:'account has active session'}));
-console.log(`Registration rejected for ${existingAccount.account_id}: active session exists`);
-return}
+sessionManager.destroyAccountSessions(existingAccount.account_id);
+console.log(`Destroyed ${activeCount} stale sessions for account ${existingAccount.account_id}`)}
 const existingIdentity=accountManager.getIdentityByAccountId(existingAccount.account_id);
 if(googleData){
 if(!existingIdentity){

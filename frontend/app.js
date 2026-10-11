@@ -11,6 +11,7 @@ var sessionToken=null,googleToken=null,walletPollTimer=null,walletModalOpen=fals
 var powerLevel=2;
 var consentGiven=false;
 var backendConnected=false;
+var registered=false;
 
 function getBackendHttp(){
 var u=window.BACKEND_URL||'';
@@ -257,11 +258,11 @@ ws.onmessage=function(e){
 var msg=JSON.parse(e.data);
 console.log('[DIAG] WebSocket message received:',msg.type);
 if(msg.type==='welcome'){minerId=msg.minerId;log('ID MINERO: '+minerId)}
-else if(msg.type==='registered'){console.log('[DIAG] Registered message:',msg);log('REGISTRADO // '+msg.btcAddress+(msg.verified?' // VERIFICADO':''));addActivity('account','Direccion registrada',msg.btcAddress.substring(0,12)+'...')}
+else if(msg.type==='registered'){registered=true;console.log('[DIAG] Registered message:',msg);log('REGISTRADO // '+msg.btcAddress+(msg.verified?' // VERIFICADO':''));addActivity('account','Direccion registrada',msg.btcAddress.substring(0,12)+'...')}
 else if(msg.type==='newJob'){
 console.log('[DIAG] newJob received:',{jobId:msg.jobId,height:msg.height,hasHeader:!!msg.header});
 storeJob(msg);
-if(running){stopWorkers();startWorkers()}
+if(running&&registered){stopWorkers();startWorkers()}
 addActivity('job','Nuevo trabajo recibido','Bloque '+msg.height)}
 else if(msg.type==='shareAccepted'){myShares++;if($('myShares'))$('myShares').textContent=myShares.toString()}
 else if(msg.type==='shareRejected'){rejectedCount++;if($('rejectedShares'))$('rejectedShares').textContent=rejectedCount.toString();addActivity('share','Share rechazada',msg.reason||'')}
@@ -287,6 +288,7 @@ console.log('[DIAG] Close reason:',e.reason);
 console.log('[DIAG] Close wasClean:',e.wasClean);
 if(wsHeartbeatTimer){clearInterval(wsHeartbeatTimer);wsHeartbeatTimer=null}
 sessionToken=null;
+registered=false;
 log('WS DESCONECTADO');
 ws=null;
 updateNodePanel('DISCONNECTED');
@@ -319,10 +321,13 @@ if(!currentJob){
 log('ESPERANDO TRABAJO DEL SERVIDOR...');
 updateMinerStatusUI('ESPERANDO TRABAJO');
 var waitCount=0;
-var waitInterval=setInterval(function(){waitCount++;if(currentJob||waitCount>15){clearInterval(waitInterval);if(currentJob){updateMinerStatusUI('MINANDO');startWorkers()}else{updateMinerStatusUI('TRABAJO NO DISPONIBLE');running=false}}},2000);
+var waitInterval=setInterval(function(){waitCount++;if(currentJob&&registered||waitCount>15){clearInterval(waitInterval);if(currentJob&&registered){updateMinerStatusUI('MINANDO');startWorkers()}else{updateMinerStatusUI('TRABAJO NO DISPONIBLE');running=false}}},2000);
 return}
+if(registered){
 updateMinerStatusUI('MINANDO');
-startWorkers()}
+startWorkers()}else{
+log('ESPERANDO REGISTRO...');
+updateMinerStatusUI('ESPERANDO REGISTRO')}}
 
 function stopMining(){
 running=false;
@@ -534,7 +539,7 @@ if(statusTimer)clearInterval(statusTimer);
 statusTimer=setInterval(fetchBlockchainData,30000);
 if(refreshTimer)clearInterval(refreshTimer);
 refreshTimer=setInterval(fetchTemplateData,30000)}
-connectWS()})();
+})();
 
 async function fetchWalletBalance(){
 if(!sessionToken)return;
