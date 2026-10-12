@@ -1,1 +1,1 @@
-window.BACKEND_URL='https://ceiling-phantom-environment-ease.trycloudflare.com';
+window.BACKEND_URL='wss://ceiling-phantom-environment-ease.trycloudflare.com';
