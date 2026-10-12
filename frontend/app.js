@@ -8,6 +8,7 @@ var exhausted=0,total=0,lastRate=performance.now(),hashes=0;
 var refreshTimer=null,statusTimer=null,wsHeartbeatTimer=null;
 var wsRetries=0,wsMaxRetries=0,wsReconnectTimer=null,wsBaseDelay=3000,wsMaxDelay=60000;
 var sessionToken=null,googleToken=null,walletPollTimer=null,walletModalOpen=false;
+var lastWalletData=null;
 var powerLevel=2;
 var consentGiven=false;
 var backendConnected=false;
@@ -271,8 +272,8 @@ else if(msg.type==='blockFound'){log('BLOQUE ENCONTRADO POR '+msg.minerId+' EN A
 else if(msg.type==='blockAccepted'){log('BLOQUE ACEPTADO EN ALTURA '+msg.height);updateMinerStatusUI('BLOQUE ACEPTADO!');addActivity('block','Bloque aceptado por Bitcoin Core','Altura '+msg.height)}
 else if(msg.type==='blockRejected'){log('BLOQUE RECHAZADO: '+msg.reason);addActivity('error','Bloque rechazado',msg.reason)}
 else if(msg.type==='sessionToken'){sessionToken=msg.token;log('SESION AUTENTICADA');if(walletModalOpen)fetchWalletBalance();startWalletPolling()}
-else if(msg.type==='balanceUpdate'){if(walletModalOpen)updateWalletUI(msg);addActivity('balance','Saldo actualizado')}
-else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' acreditado (bloque '+msg.block_height+')','reward');if(walletModalOpen)updateWalletUI(msg);addActivity('reward','Recompensa distribuida',fmtBtc(msg.reward_sat)+' en bloque '+msg.block_height)}
+else if(msg.type==='balanceUpdate'){if(walletModalOpen){lastWalletData=Object.assign({},lastWalletData||{},msg);updateWalletUI(msg)}addActivity('balance','Saldo actualizado')}
+else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' acreditado (bloque '+msg.block_height+')','reward');if(walletModalOpen){if(lastWalletData){lastWalletData.pending_sat=msg.pending_sat||0;lastWalletData.confirmed_sat=msg.confirmed_sat||0;lastWalletData.total_earned_sat=msg.total_earned_sat||0}updateWalletUI(msg)}addActivity('reward','Recompensa distribuida',fmtBtc(msg.reward_sat)+' en bloque '+msg.block_height)}
 else if(msg.type==='registerFailed'){registered=false;var reason=msg.error||'Motivo no especificado';log('REGISTRO RECHAZADO: '+reason);}
 else if(msg.type==='error'){log('ERROR: '+msg.error)}
 else if(msg.type==='pong'){}
@@ -558,11 +559,16 @@ headers:{'Authorization':'Bearer '+tokenAtRequest}
 });
 var d={};try{d=await r.json()}catch(e){}
 if(requestId!==walletRequestId||tokenAtRequest!==sessionToken)return;
-if(!r.ok||d.ok===false){
-if(r.status===401){return}
+if(r.status===401){
+if(lastWalletData&&walletModalOpen)updateWalletUI(lastWalletData);
 return}
+if(!r.ok||d.ok===false)return;
+lastWalletData=d;
 updateWalletUI(d);
-}catch(e){}}
+}catch(e){
+if(requestId!==walletRequestId||tokenAtRequest!==sessionToken)return;
+if(lastWalletData&&walletModalOpen)updateWalletUI(lastWalletData)
+}}
 
 function showWalletNotVerified(){
 var notice=$('walletNotVerified');
@@ -580,7 +586,7 @@ if($('walletMinPayout'))$('walletMinPayout').textContent=(d.min_payout_sat||0).t
 if($('walletPoolFee'))$('walletPoolFee').textContent=(d.pool_fee_percent||0)+'%';
 if($('walletDryRun'))$('walletDryRun').style.display=d.payout_dry_run?'block':'none';
 var notice=$('walletNotVerified');
-if(notice)notice.style.display='none';
+if(notice){notice.style.display='none';notice.textContent=''}
 if($('walletEstimated')){
 if(d.estimated_has_data){
 $('walletEstimated').textContent=fmtBtc(d.estimated_sat||0);
@@ -601,6 +607,7 @@ function openWalletModal(){
 var m=$('walletModal');
 if(m)m.style.display='flex';
 walletModalOpen=true;
+if(lastWalletData)updateWalletUI(lastWalletData);
 fetchWalletBalance();
 startWalletPolling()}
 

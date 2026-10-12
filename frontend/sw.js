@@ -1,13 +1,19 @@
-var CACHE_NAME='miningbtc-v4';
+var CACHE_NAME='miningbtc-v9';
 var ASSETS=['/','/index.html','/style.css','/app.js','/config.js','/sha256d.js','/icon.svg','/manifest.json'];
 self.addEventListener('install',function(e){self.skipWaiting();e.waitUntil(caches.open(CACHE_NAME).then(function(c){return c.addAll(ASSETS)}))});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(keys){return Promise.all(keys.filter(function(k){return k!==CACHE_NAME}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});
 self.addEventListener('fetch',function(e){
 var url=new URL(e.request.url);
-if(url.pathname.match(/\.(js|html)$/)){
+if(e.request.method!=='GET')return;
+if(url.pathname.match(/^\/api\//))return;
+if(url.pathname.match(/\.(js|html|css)$/)){
 e.respondWith(fetch(e.request,{cache:'no-store'}).then(function(res){
-return caches.open(CACHE_NAME).then(function(c){c.put(e.request,res.clone());return res})
+if(res&&res.ok){var copy=res.clone();caches.open(CACHE_NAME).then(function(c){c.put(e.request,copy)})}
+return res
 }).catch(function(){return caches.match(e.request)}))
 }else{
-e.respondWith(fetch(e.request).then(function(res){return caches.open(CACHE_NAME).then(function(c){c.put(e.request,res.clone());return res})}).catch(function(){return caches.match(e.request)}))
+e.respondWith(fetch(e.request).then(function(res){
+if(res&&res.ok){var copy=res.clone();caches.open(CACHE_NAME).then(function(c){c.put(e.request,copy)})}
+return res
+}).catch(function(){return caches.match(e.request)}))
 }});

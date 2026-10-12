@@ -1,5 +1,6 @@
 var $=function(id){return document.getElementById(id)};
 var logLines=[];
+var activityLog=[];
 var ws=null,minerId=null,workers=[],running=false;
 var jobId=null,jobHeight=0,currentJob=null;
 var myShares=0,rejectedCount=0;
@@ -7,6 +8,11 @@ var exhausted=0,total=0,lastRate=performance.now(),hashes=0;
 var refreshTimer=null,statusTimer=null,wsHeartbeatTimer=null;
 var wsRetries=0,wsMaxRetries=0,wsReconnectTimer=null,wsBaseDelay=3000,wsMaxDelay=60000;
 var sessionToken=null,googleToken=null,walletPollTimer=null,walletModalOpen=false;
+var lastWalletData=null;
+var powerLevel=2;
+var consentGiven=false;
+var backendConnected=false;
+var registered=false;
 
 function getBackendHttp(){
 var u=window.BACKEND_URL||'';
@@ -18,6 +24,7 @@ function fmtRate(h){if(h>=1e6)return(h/1e6).toFixed(2)+' MH/s';if(h>=1e3)return(
 function fmtBtc(sat){return(sat/1e8).toFixed(8)+' BTC'}
 function truncate(s,n){if(!s)return'';if(s.length<=n)return s;return s.slice(0,n-3)+'...'+s.slice(-4)}
 function now(){return new Date().toLocaleTimeString()}
+function timeAgo(ts){var d=Date.now()-ts;if(d<60000)return'hace menos de 1 min';if(d<3600000)return'hace '+Math.floor(d/60000)+' min';if(d<86400000)return'hace '+Math.floor(d/3600000)+' h';return new Date(ts).toLocaleDateString()}
 
 function log(msg){
 var line='> ['+now()+'] '+msg;
@@ -27,29 +34,49 @@ var el=$('log');
 if(el)el.textContent=logLines.join('\n');
 try{var el2=$('log');el2.scrollTop=el2.scrollHeight}catch(e){}}
 
+function addActivity(type,msg,detail){
+activityLog.unshift({type:type,msg:msg,detail:detail||'',ts:Date.now()});
+if(activityLog.length>50)activityLog.pop();
+renderActivity()}
+
+function renderActivity(){
+var el=$('activityList');
+if(!el)return;
+if(activityLog.length===0){el.innerHTML='<div class="activity-empty">La actividad de mineria aparecera aqui cuando inicies.</div>';return}
+var html='';
+for(var i=0;i<activityLog.length;i++){
+var a=activityLog[i];
+var cls='activity-item activity-'+a.type;
+html+='<div class="'+cls+'">';
+html+='<span class="activity-time">'+timeAgo(a.ts)+'</span>';
+html+='<span class="activity-msg">'+a.msg+'</span>';
+if(a.detail)html+='<span class="activity-detail">'+a.detail+'</span>';
+html+='</div>'}
+el.innerHTML=html}
+
+setInterval(function(){if(activityLog.length>0)renderActivity()},60000);
+
 function clock(){if($('clock'))$('clock').textContent=now()}
 setInterval(clock,1000);clock();
 
 function updateNodePanel(status){
 var url=window.BACKEND_URL||'';
 var host=url.replace(/wss?:\/\//,'').replace(/\/.*$/,'');
-if($('backendUrl'))$('backendUrl').textContent=host;
-if($('nodeConnection'))$('nodeConnection').textContent='WebSocket: '+status;
+if($('statusText'))$('statusText').textContent=status==='CONNECTED'?'CONECTADO':'DESCONECTADO';
 if(status==='CONNECTED'){
 wsRetries=0;
-if($('bitcoinCore')){$('bitcoinCore').textContent='CONNECTED';$('bitcoinCore').style.color='var(--green)'}
-}else{
-if($('bitcoinCore')){$('bitcoinCore').textContent='DISCONNECTED';$('bitcoinCore').style.color='var(--red)'}
-}}
+if($('reconnectBtn'))$('reconnectBtn').style.display='none'}
+else{
+if($('reconnectBtn')&&backendConnected)$('reconnectBtn').style.display='inline-block'}}
 
 function updateMinerStatusUI(text){
 var el=$('minerStatus');if(!el)return;
 el.textContent=text;
 el.classList.remove('s-mining','s-ok','s-err','s-warn');
-if(text==='MINING'||text==='BLOCK CANDIDATE'||text==='CONNECTING...')el.classList.add('s-mining');
-else if(text==='BLOCK FOUND!'||text==='BLOCK ACCEPTED!')el.classList.add('s-ok');
-else if(text==='STOPPED'||text==='IDLE')el.classList.add('s-warn');
-else if(text.indexOf('ERROR')>=0||text.indexOf('OFFLINE')>=0)el.classList.add('s-err');
+if(text==='MINANDO'||text==='CANDIDATO DE BLOQUE'||text==='CONECTANDO...')el.classList.add('s-mining');
+else if(text==='BLOQUE ENCONTRADO!'||text==='BLOQUE ACEPTADO!')el.classList.add('s-ok');
+else if(text==='DETENIDO'||text==='INACTIVO')el.classList.add('s-warn');
+else if(text.indexOf('ERROR')>=0||text.indexOf('DESCONECTADO')>=0)el.classList.add('s-err');
 }
 
 function setMiningRate(h){if($('minerHashrate'))$('minerHashrate').textContent=fmtRate(h)}
@@ -62,55 +89,47 @@ return d}
 
 async function checkBackend(){
 var base=getBackendHttp();
+console.log('[DIAG] checkBackend called, base=',base);
 if(!base){
 updateNodePanel('DISCONNECTED');
-log('BACKEND_URL NOT CONFIGURED');
+log('BACKEND_URL NO CONFIGURADO');
 return false}
 try{
+console.log('[DIAG] Fetching:',base+'/api/health');
 var d=await getJSON(base+'/api/health');
+console.log('[DIAG] Health check success:',d);
 if($('led'))$('led').classList.add('on');
-if($('statusText'))$('statusText').textContent='CONNECTED';
+if($('statusText'))$('statusText').textContent='CONECTADO';
 updateNodePanel('CONNECTED');
-log('BACKEND CONNECTED // v'+(d.version||'?'));
+backendConnected=true;
+log('BACKEND CONECTADO // v'+(d.version||'?'));
 return true}catch(e){
+console.error('[DIAG] Health check failed:',e);
+console.error('[DIAG] Error name:',e.name);
+console.error('[DIAG] Error message:',e.message);
 if($('led'))$('led').classList.remove('on');
-if($('statusText'))$('statusText').textContent='OFFLINE';
+if($('statusText'))$('statusText').textContent='DESCONECTADO';
 updateNodePanel('DISCONNECTED');
-log('BACKEND UNREACHABLE // '+e.message);
+backendConnected=false;
+log('BACKEND NO DISPONIBLE // '+e.message);
 return false}}
 
 async function fetchBlockchainData(){
 var base=getBackendHttp();
-if(!base){log('BACKEND_URL NOT CONFIGURED');return null}
+if(!base)return null;
 try{
 var s=await getJSON(base+'/api/status');
 if($('led'))$('led').classList.add('on');
-if($('statusText'))$('statusText').textContent='CONNECTED';
-if(s.bitcoin_core==='offline'){
-if($('bitcoinCore')){$('bitcoinCore').textContent='OFFLINE';$('bitcoinCore').style.color='var(--red)'}
-if($('network'))$('network').textContent='WAITING';
-if($('blocks'))$('blocks').textContent='---';
-if($('difficulty'))$('difficulty').textContent='---';
-if($('hashrate'))$('hashrate').textContent='---';
-log('BACKEND OK // BITCOIN CORE OFFLINE // MINING UNAVAILABLE');
-return s}
+if($('statusText'))$('statusText').textContent='CONECTADO';
 if($('network'))$('network').textContent=(s.chain||'mainnet').toUpperCase();
 if($('networkLabel'))$('networkLabel').textContent=(s.chain||'mainnet').toUpperCase();
-if($('bitcoinNetwork'))$('bitcoinNetwork').textContent=(s.chain||'mainnet').toUpperCase();
 if($('blocks'))$('blocks').textContent=(s.blocks||0).toLocaleString();
-if($('blocks2'))$('blocks2').textContent=(s.blocks||0).toLocaleString();
 if($('difficulty'))$('difficulty').textContent=Number(s.difficulty||0).toLocaleString(undefined,{maximumFractionDigits:2});
-if($('difficulty2'))$('difficulty2').textContent=Number(s.difficulty||0).toLocaleString(undefined,{maximumFractionDigits:2});
 if($('hashrate'))$('hashrate').textContent=Number(s.networkhashps||0).toLocaleString(undefined,{maximumFractionDigits:0})+' H/s';
-if($('hashrate2'))$('hashrate2').textContent=Number(s.networkhashps||0).toLocaleString(undefined,{maximumFractionDigits:0})+' H/s';
-if($('bitcoinCore')){$('bitcoinCore').textContent='CONNECTED';$('bitcoinCore').style.color='var(--green)'}
 if(s.verificationprogress&&s.verificationprogress<0.9999){
-log('NODE OK // '+s.chain.toUpperCase()+' // HEIGHT '+s.blocks+' // SYNC '+(s.verificationprogress*100).toFixed(2)+'%')}
-else{log('NODE OK // '+s.chain.toUpperCase()+' // HEIGHT '+s.blocks)}
-if(s.warnings)log('WARNING: '+s.warnings);
+log('NODO OK // '+s.chain.toUpperCase()+' // ALTURA '+s.blocks)}
 return s}catch(e){
-if($('bitcoinCore')){$('bitcoinCore').textContent='DISCONNECTED';$('bitcoinCore').style.color='var(--red)'}
-log('RPC ERROR // '+e.message);
+log('ERROR NODO: '+e.message);
 return null}}
 
 async function fetchTemplateData(){
@@ -118,20 +137,10 @@ var base=getBackendHttp();
 if(!base)return null;
 try{
 var t=await getJSON(base+'/api/template');
-if($('tHeight'))$('tHeight').textContent=t.height;
-if($('tHeight2'))$('tHeight2').textContent=t.height;
 if($('templateHeight'))$('templateHeight').textContent=t.height;
-if($('prev'))$('prev').textContent=truncate(t.previousblockhash,16);
-if($('prev2'))$('prev2').textContent=truncate(t.previousblockhash,16);
-if($('bits'))$('bits').textContent=t.bits;
-if($('target'))$('target').textContent=truncate(t.target,16);
-if($('target2'))$('target2').textContent=truncate(t.target,16);
-if($('txcount'))$('txcount').textContent=t.transactions;
-if($('txcount2'))$('txcount2').textContent=t.transactions;
 if($('coinbase'))$('coinbase').textContent=(Number(t.coinbasevalue)/1e8).toFixed(8)+' BTC';
-log('TEMPLATE '+t.height+' LOADED // '+t.transactions+' TX // '+truncate(t.previousblockhash,16));
 return t}catch(e){
-log('TEMPLATE ERROR // '+e.message);
+log('ERROR PLANTILLA: '+e.message);
 return null}}
 
 function storeJob(j){
@@ -147,18 +156,8 @@ shareTarget:j.shareTarget||null,
 bodyHex:j.bodyHex||'',
 bits:j.bits||null,
 previousblockhash:j.previousblockhash||null,
-coinbasevalue:j.coinbasevalue||null
-};
-console.log('[Job] Stored job:',{jobId:j.jobId,height:j.height,hasShareTarget:!!j.shareTarget,shareTarget:j.shareTarget?JSON.stringify(j.shareTarget).slice(0,50):'null'});
-if($('templateHeight'))$('templateHeight').textContent=j.height;
-if($('tHeight'))$('tHeight').textContent=j.height;
-if($('tHeight2'))$('tHeight2').textContent=j.height;
-if(j.bits&&$('bits'))$('bits').textContent=j.bits;
-if(j.previousblockhash&&$('prev'))$('prev').textContent=truncate(j.previousblockhash,16);
-if(j.previousblockhash&&$('prev2'))$('prev2').textContent=truncate(j.previousblockhash,16);
-if(j.blockTarget&&$('target'))$('target').textContent=truncate(j.blockTarget.map(function(b){return(b<16?'0':'')+b.toString(16)}).join(''),16);
-if(j.blockTarget&&$('target2'))$('target2').textContent=truncate(j.blockTarget.map(function(b){return(b<16?'0':'')+b.toString(16)}).join(''),16);
-if(j.coinbasevalue&&$('coinbase'))$('coinbase').textContent=fmtBtc(j.coinbasevalue)}
+coinbasevalue:j.coinbasevalue||null};
+if($('templateHeight'))$('templateHeight').textContent=j.height}
 
 function stopWorkers(){
 workers.forEach(function(w){try{w.postMessage({type:'stop'})}catch(e){};w.terminate()});
@@ -168,7 +167,9 @@ if($('workerCount'))$('workerCount').textContent='0'}
 function startWorkers(){
 if(!currentJob||!currentJob.header)return;
 stopWorkers();
-var n=Math.max(1,Math.min(navigator.hardwareConcurrency||2,16));
+var maxCores=navigator.hardwareConcurrency||2;
+var divisor=Math.max(1,Math.min(powerLevel,maxCores));
+var n=Math.max(1,Math.ceil(maxCores/divisor));
 var U=0x100000000,span=Math.floor(U/n);
 exhausted=0;total=0;hashes=0;lastRate=performance.now();
 if($('workerCount'))$('workerCount').textContent=String(n);
@@ -188,87 +189,113 @@ if(ws&&ws.readyState===1&&minerId){try{ws.send(JSON.stringify({type:'hashrate',h
 }}
 else if(m.type==='share'){
 if(ws&&ws.readyState===1){
-console.log('[Share] Sending to server:',m.nonce);
-try{ws.send(JSON.stringify({type:'share',minerId:minerId,jobId:m.jobId,nonce:m.nonce,hashHex:m.hash}))}catch(e){console.error('[Share] Send error:',e)}}
-else{myShares++;console.log('[Share] Counted locally (no WS):',myShares);if($('myShares'))$('myShares').textContent=myShares.toString()}
+try{ws.send(JSON.stringify({type:'share',minerId:minerId,jobId:m.jobId,nonce:m.nonce,hashHex:m.hash}))}catch(e){}}
+else{myShares++;if($('myShares'))$('myShares').textContent=myShares.toString()}
 }
 else if(m.type==='nonce'){
 if(!running)return;
-updateMinerStatusUI('BLOCK CANDIDATE');
-log('BLOCK CANDIDATE NONCE '+m.nonce);
+updateMinerStatusUI('CANDIDATO DE BLOQUE');
+addActivity('block','Candidato de bloque encontrado','Nonce: '+m.nonce);
+log('CANDIDATO DE BLOQUE: nonce '+m.nonce);
 if(ws&&ws.readyState===1){try{ws.send(JSON.stringify({type:'share',minerId:minerId,jobId:m.jobId,nonce:m.nonce,hashHex:m.hash}))}catch(e){}}
 }}})(i);
 w.postMessage({type:'start',job:currentJob,from:fromN,span:sp})}
-log('MINING // '+n+' WORKERS // HEIGHT '+jobHeight)}
+log('MINANDO // '+n+' WORKERS // ALTURA '+jobHeight);
+addActivity('mining','Mineria iniciada',n+' workers, intensidad '+(powerLevel===1?'baja':powerLevel===2?'media':'alta'))}
 
 function scheduleWsReconnect(){
 if(wsReconnectTimer)return;
 wsRetries++;
 var delay=Math.min(wsBaseDelay*Math.pow(2,wsRetries-1),wsMaxDelay);
 delay+=Math.random()*1000;
-log('WS RECONNECTING (attempt '+wsRetries+') IN '+(delay/1000).toFixed(1)+'s...');
+log('RECONECTANDO (intento '+wsRetries+') en '+(delay/1000).toFixed(1)+'s...');
 wsReconnectTimer=setTimeout(function(){
 wsReconnectTimer=null;
 connectWS()},delay)}
 
 window.addEventListener('visibilitychange',function(){
 if(!document.hidden&&(!ws||ws.readyState!==1)){
-log('PAGE VISIBLE - RECONNECTING...');
+log('PAGINA VISIBLE - RECONECTANDO...');
 wsRetries=0;
 if(wsReconnectTimer){clearTimeout(wsReconnectTimer);wsReconnectTimer=null}
 connectWS()}});
 
 window.addEventListener('online',function(){
-log('NETWORK ONLINE - RECONNECTING...');
+log('RED DISPONIBLE - RECONECTANDO...');
 wsRetries=0;
 if(wsReconnectTimer){clearTimeout(wsReconnectTimer);wsReconnectTimer=null}
 connectWS()});
 
 window.addEventListener('offline',function(){
-log('NETWORK OFFLINE');
+log('RED NO DISPONIBLE');
+addActivity('connection','Conexion perdida','Red no disponible');
 if(wsReconnectTimer){clearTimeout(wsReconnectTimer);wsReconnectTimer=null}});
 
 function connectWS(){
 var wsUrl=window.BACKEND_URL||'';
-if(!wsUrl){log('BACKEND_URL NOT CONFIGURED');return}
-if(ws&&ws.readyState<=1){return}
+if(!wsUrl){log('BACKEND_URL NO CONFIGURADO');return}
+console.log('[DIAG] connectWS called, wsUrl=',wsUrl);
+console.log('[DIAG] Current ws state:',ws?ws.readyState:'null');
+if(ws&&ws.readyState<=1){console.log('[DIAG] Already connecting/connected, skipping');return}
 if(wsHeartbeatTimer){clearInterval(wsHeartbeatTimer);wsHeartbeatTimer=null}
-try{ws=new WebSocket(wsUrl+'/ws')}catch(e){log('WS FAILED: '+e.message);scheduleWsReconnect();return}
+var fullWsUrl=wsUrl+'/ws';
+console.log('[DIAG] Attempting WebSocket connection to:',fullWsUrl);
+try{ws=new WebSocket(fullWsUrl);console.log('[DIAG] WebSocket object created, readyState=',ws.readyState)}catch(e){console.error('[DIAG] WebSocket constructor error:',e);log('WS FALLIDO: '+e.message);scheduleWsReconnect();return}
 ws.onopen=function(){
-log('WEBSOCKET CONNECTED');
+console.log('[DIAG] WebSocket onopen fired, readyState=',ws.readyState);
+log('WEBSOCKET CONECTADO');
 updateNodePanel('CONNECTED');
+addActivity('connection','Conectado al servidor');
 wsRetries=0;
+if($('reconnectBtn'))$('reconnectBtn').style.display='none';
 wsHeartbeatTimer=setInterval(function(){
 if(ws&&ws.readyState===1){try{ws.send(JSON.stringify({type:'ping'}))}catch(e){}}
 },30000);
 var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
-if(!btcAddress){log('BTC ADDRESS REQUIRED FOR MINING');return}
-try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress,googleToken:googleToken}));log('REGISTERING...'+(googleToken?' (verified)':' (legacy)'))}catch(e){log('REGISTER FAILED: '+e.message)}};
+console.log('[DIAG] onopen: btcAddress=',btcAddress?'[set]':'[empty]');
+if(!btcAddress){log('DIRECCION BTC REQUERIDA PARA MINAR');return}
+try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress,googleToken:googleToken}));console.log('[DIAG] Register message sent');log('REGISTRANDO...'+(googleToken?' (verificado)':''))}catch(e){console.error('[DIAG] Register send error:',e);log('ERROR REGISTRO: '+e.message)}};
 ws.onmessage=function(e){
 var msg=JSON.parse(e.data);
-if(msg.type==='welcome'){minerId=msg.minerId;log('MINER ID: '+minerId)}
-else if(msg.type==='registered'){log('REGISTERED // '+msg.btcAddress+(msg.verified?' // VERIFIED':' // legacy'));if($('walletVerified')){$('walletVerified').textContent=msg.verified?'Verified':'Not verified'}}
+console.log('[DIAG] WebSocket message received:',msg.type);
+if(msg.type==='welcome'){minerId=msg.minerId;log('ID MINERO: '+minerId)}
+else if(msg.type==='registered'){registered=true;console.log('[DIAG] Registered message:',msg);log('REGISTRADO // '+msg.btcAddress+(msg.verified?' // VERIFICADO':''));addActivity('account','Direccion registrada',msg.btcAddress.substring(0,12)+'...')}
 else if(msg.type==='newJob'){
+console.log('[DIAG] newJob received:',{jobId:msg.jobId,height:msg.height,hasHeader:!!msg.header});
 storeJob(msg);
-if(running){stopWorkers();startWorkers()}
-log('NEW JOB: '+msg.height)}
-else if(msg.type==='shareAccepted'){myShares++;console.log('[Shares] Accepted:',myShares);if($('myShares'))$('myShares').textContent=myShares.toString()}
-else if(msg.type==='shareRejected'){rejectedCount++;console.log('[Shares] Rejected:',rejectedCount);if($('rejectedShares'))$('rejectedShares').textContent=rejectedCount.toString();log('SHARE REJECTED: '+(msg.reason||''))}
+if(running&&registered){stopWorkers();startWorkers()}
+addActivity('job','Nuevo trabajo recibido','Bloque '+msg.height)}
+else if(msg.type==='shareAccepted'){myShares++;if($('myShares'))$('myShares').textContent=myShares.toString()}
+else if(msg.type==='shareRejected'){rejectedCount++;if($('rejectedShares'))$('rejectedShares').textContent=rejectedCount.toString();addActivity('share','Share rechazada',msg.reason||'')}
 else if(msg.type==='poolStats'){updatePoolUI(msg)}
-else if(msg.type==='blockFound'){log('BLOCK FOUND BY '+msg.minerId+' AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK FOUND!')}
-else if(msg.type==='blockAccepted'){log('BLOCK ACCEPTED AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK ACCEPTED!')}
-else if(msg.type==='blockRejected'){log('BLOCK REJECTED: '+msg.reason)}
-else if(msg.type==='sessionToken'){sessionToken=msg.token;console.log('[Auth] Session token received');log('SESSION AUTHENTICATED');if(walletModalOpen)fetchWalletBalance();startWalletPolling()}
-else if(msg.type==='balanceUpdate'){if(walletModalOpen)updateWalletUI(msg);console.log('[Wallet] Balance update:',msg)}
-else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' credited (block '+msg.block_height+')','reward');if(walletModalOpen)updateWalletUI(msg);log('REWARD: +'+fmtBtc(msg.reward_sat)+' AT BLOCK '+msg.block_height)}
+else if(msg.type==='blockFound'){log('BLOQUE ENCONTRADO POR '+msg.minerId+' EN ALTURA '+msg.height);updateMinerStatusUI('BLOQUE ENCONTRADO!');addActivity('block','Bloque encontrado en altura '+msg.height)}
+else if(msg.type==='blockAccepted'){log('BLOQUE ACEPTADO EN ALTURA '+msg.height);updateMinerStatusUI('BLOQUE ACEPTADO!');addActivity('block','Bloque aceptado por Bitcoin Core','Altura '+msg.height)}
+else if(msg.type==='blockRejected'){log('BLOQUE RECHAZADO: '+msg.reason);addActivity('error','Bloque rechazado',msg.reason)}
+else if(msg.type==='sessionToken'){sessionToken=msg.token;log('SESION AUTENTICADA');if(walletModalOpen)fetchWalletBalance();startWalletPolling()}
+else if(msg.type==='balanceUpdate'){if(walletModalOpen){lastWalletData=Object.assign({},lastWalletData||{},msg);updateWalletUI(msg)}addActivity('balance','Saldo actualizado')}
+else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' acreditado (bloque '+msg.block_height+')','reward');if(walletModalOpen){if(lastWalletData){lastWalletData.pending_sat=msg.pending_sat||0;lastWalletData.confirmed_sat=msg.confirmed_sat||0;lastWalletData.total_earned_sat=msg.total_earned_sat||0}updateWalletUI(msg)}addActivity('reward','Recompensa distribuida',fmtBtc(msg.reward_sat)+' en bloque '+msg.block_height)}
+else if(msg.type==='registerFailed'){registered=false;var reason=msg.error||'Motivo no especificado';log('REGISTRO RECHAZADO: '+reason);}
+else if(msg.type==='error'){log('ERROR: '+msg.error)}
 else if(msg.type==='pong'){}
-else if(msg.type==='error'){log('ERROR: '+msg.error)}};
-ws.onclose=function(){
+};
+ws.onerror=function(e){
+console.error('[DIAG] WebSocket onerror:',e);
+console.error('[DIAG] WebSocket readyState at error:',ws?ws.readyState:'null');
+log('WS ERROR');
+};
+ws.onclose=function(e){
+console.log('[DIAG] WebSocket onclose fired');
+console.log('[DIAG] Close code:',e.code);
+console.log('[DIAG] Close reason:',e.reason);
+console.log('[DIAG] Close wasClean:',e.wasClean);
 if(wsHeartbeatTimer){clearInterval(wsHeartbeatTimer);wsHeartbeatTimer=null}
 sessionToken=null;
-log('WS DISCONNECTED');
+registered=false;
+log('WS DESCONECTADO');
 ws=null;
 updateNodePanel('DISCONNECTED');
+addActivity('connection','Desconectado del servidor');
+if($('reconnectBtn'))$('reconnectBtn').style.display='inline-block';
 scheduleWsReconnect()};
 ws.onerror=function(){}}
 
@@ -280,43 +307,78 @@ if($('poolHashrate'))$('poolHashrate').textContent=stats?fmtRate(stats.totalHash
 
 async function startMining(){
 if(running)return;
+if(!consentGiven){showConsent();return}
+var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+if(!btcAddress){
+log('INTRODUCE TU DIRECCION BTC ANTES DE MINAR');
+updateMinerStatusUI('DIRECCION REQUERIDA');
+if($('btcAddress'))$('btcAddress').focus();
+return}
 running=true;
-updateMinerStatusUI('CONNECTING...');
-var base=getBackendHttp();
-if(base){
-try{
-var d=await getJSON(base+'/api/job');
-if(d&&!d.error){storeJob(d);log('JOB FROM BACKEND')}
-}catch(e){log('JOB FETCH FAILED: '+e.message)}}
+updateMinerStatusUI('CONECTANDO...');
+addActivity('mining','Iniciando mineria...');
 if(!ws||ws.readyState!==1){connectWS()}
 await new Promise(function(r){setTimeout(r,2000)});
 if(!currentJob){
-log('WAITING FOR JOB FROM SERVER...');
-updateMinerStatusUI('WAITING FOR JOB');
+log('ESPERANDO TRABAJO DEL SERVIDOR...');
+updateMinerStatusUI('ESPERANDO TRABAJO');
 var waitCount=0;
-var waitInterval=setInterval(function(){waitCount++;if(currentJob||waitCount>15){clearInterval(waitInterval);if(currentJob){updateMinerStatusUI('MINING');startWorkers()}else{updateMinerStatusUI('NO JOB AVAILABLE');running=false}}},2000);
+var waitInterval=setInterval(function(){waitCount++;if(currentJob&&registered||waitCount>15){clearInterval(waitInterval);if(currentJob&&registered){updateMinerStatusUI('MINANDO');startWorkers()}else{updateMinerStatusUI('TRABAJO NO DISPONIBLE');running=false}}},2000);
 return}
-updateMinerStatusUI('MINING');
-startWorkers()}
+if(registered){
+updateMinerStatusUI('MINANDO');
+startWorkers()}else{
+log('ESPERANDO REGISTRO...');
+updateMinerStatusUI('ESPERANDO REGISTRO')}}
 
 function stopMining(){
 running=false;
 stopWorkers();
-updateMinerStatusUI('STOPPED');
+updateMinerStatusUI('DETENIDO');
 setMiningRate(0);
 stopWalletPolling();
-log('MINING STOPPED')}
+addActivity('mining','Mineria detenida');
+log('MINERIA DETENIDA')}
 
 if($('start'))$('start').onclick=startMining;
-if($('stop'))$('stop').onclick=function(){stopMining();askSaveSession()};
-var deferredPrompt=null;
-window.addEventListener('beforeinstallprompt',function(e){deferredPrompt=e});
-if($('downloadApp'))$('downloadApp').onclick=function(){
-if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(function(r){deferredPrompt=null});return}
-var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
-if(isIOS&&!navigator.standalone){log('iOS: Pulsa Compartir > "Añadir a pantalla de inicio"');return}
-log('APP NO DISPONIBLE PARA INSTALAR');
-};
+if($('stop'))$('stop').onclick=function(){stopMining()};
+
+function showConsent(){
+var m=$('consentModal');
+if(m)m.style.display='flex'}
+function hideConsent(){
+var m=$('consentModal');
+if(m)m.style.display='none'}
+
+if($('consentAccept'))$('consentAccept').onclick=function(){
+consentGiven=true;
+hideConsent();
+var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+if(!btcAddress){
+log('INTRODUCE TU DIRECCION BTC ANTES DE MINAR');
+if($('btcAddress'))$('btcAddress').focus();
+return}
+startMining()};
+if($('consentCancel'))$('consentCancel').onclick=hideConsent;
+if(document.querySelector('.consent-backdrop'))document.querySelector('.consent-backdrop').onclick=hideConsent;
+
+document.querySelectorAll('.power-btn').forEach(function(btn){
+btn.onclick=function(){
+document.querySelectorAll('.power-btn').forEach(function(b){b.classList.remove('active')});
+btn.classList.add('active');
+powerLevel=parseInt(btn.dataset.power);
+var labels={1:'Baja - usa pocos nucleos, menor consumo',2:'Media - usa la mitad de los nucleos',4:'Alta - usa todos los nucleos'};
+if($('powerHint'))$('powerHint').textContent=labels[powerLevel]||'';
+if(running&&currentJob){stopWorkers();startWorkers();addActivity('settings','Intensidad cambiada',labels[powerLevel])}
+}});
+
+if($('reconnectBtn'))$('reconnectBtn').onclick=function(){
+wsRetries=0;
+if(wsReconnectTimer){clearTimeout(wsReconnectTimer);wsReconnectTimer=null}
+if(ws){try{ws.close()}catch(e){}}
+log('RECONECTANDO MANUALMENTE...');
+addActivity('connection','Reconexion manual');
+connectWS()};
 
 var GOOGLE_CLIENT_ID='46928798077-vtsu6fln277j6s601n2b4feg1hrsfi72.apps.googleusercontent.com';
 var SESSION_KEY='mining_btc_session';
@@ -325,21 +387,15 @@ var googleTokenClient=null;
 
 function initGoogle(){
 if(typeof google!=='undefined'&&google.accounts){
-console.log('[Session] Google library detected, initializing...');
 try{
 google.accounts.id.initialize({
 client_id:GOOGLE_CLIENT_ID,
 callback:handleGoogleCredential
 });
 googleReady=true;
-console.log('[Session] Google initialized successfully');
-}catch(e){
-console.error('[Session] Google init error:',e);
-googleReady=false;
-}
+}catch(e){googleReady=false}
 }else{
-console.log('[Session] Google not ready, retrying...');
-setTimeout(initGoogle,300);
+setTimeout(initGoogle,300)
 }
 }
 
@@ -349,20 +405,12 @@ function clearSession(){try{localStorage.removeItem(SESSION_KEY)}catch(e){}}
 
 function showOverlay(){
 var el=$('sessionOverlay');
-if(el){
-el.style.display='flex';
-console.log('[Session] Overlay shown');
-}else{
-console.error('[Session] Overlay element not found');
-}
-}
+if(el)el.style.display='flex'}
 function hideOverlay(){
 var el=$('sessionOverlay');
-if(el)el.style.display='none';
-}
+if(el)el.style.display='none'}
 
 function setSessionContent(title,subtitle,buttons,showGoogleBtn){
-console.log('[Session] setSessionContent called:',{title,subtitle,buttons:buttons.length,showGoogleBtn});
 if($('sessionTitle'))$('sessionTitle').textContent=title;
 if($('sessionSubtitle'))$('sessionSubtitle').textContent=subtitle;
 if($('sessionButtons')){
@@ -372,7 +420,6 @@ var btn=document.createElement('button');
 btn.className='btn '+(b.cls||'btn-secondary');
 btn.textContent=b.text;
 btn.onclick=function(){
-console.log('[Session] Button clicked:',b.text);
 b.action();
 if(b.closeOverlay!==false)hideOverlay();
 };
@@ -380,35 +427,28 @@ $('sessionButtons').appendChild(btn);
 });
 }
 if(showGoogleBtn){
-console.log('[Session] Adding Google button');
 var btnArea=document.createElement('div');
 btnArea.style.cssText='margin-top:16px;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;';
 var btn=document.createElement('button');
 btn.className='btn btn-primary';
 btn.style.cssText='width:100%;max-width:300px;padding:14px 24px;font-size:15px;font-weight:600;cursor:pointer;border:none;';
-btn.textContent='Iniciar sesión con Google';
+btn.textContent='Iniciar sesion con Google';
 btn.onclick=function(){
-console.log('[Session] Google sign-in clicked, googleReady:',googleReady);
-if(!googleReady){alert('Google no está listo, espera un momento.');return;}
+if(!googleReady){alert('Google no esta listo, espera un momento.');return;}
 try{
 google.accounts.id.prompt(function(n){
-console.log('[Session] Prompt callback - notDisplayed:',n.isNotDisplayed(),'skipped:',n.isSkippedMoment(),'dismissed:',n.isDismissedMoment());
 if(n.isNotDisplayed()){
 google.accounts.id.cancel();
 setTimeout(function(){
 google.accounts.id.prompt(function(n2){
-console.log('[Session] Second prompt - notDisplayed:',n2.isNotDisplayed());
 if(n2.isNotDisplayed()){
-alert('No se pudo abrir Google. Asegúrate de que las ventanas emergentes están permitidas.');
+alert('No se pudo abrir Google. Asegurate de que las ventanas emergentes estan permitidas.');
 }
 });
 },500);
 }
 });
-}catch(e){
-console.error('[Session] Google error:',e);
-alert('Error al iniciar Google: '+e.message);
-}
+}catch(e){alert('Error al iniciar Google: '+e.message)}
 };
 btnArea.appendChild(btn);
 $('sessionButtons').appendChild(btnArea);
@@ -417,24 +457,17 @@ showOverlay();
 }
 
 function handleGoogleCredential(response){
-console.log('[Session] Google credential received');
 try{
 googleToken=response.credential;
 var parts=response.credential.split('.');
-if(parts.length!==3){
-throw new Error('Invalid JWT format');
-}
+if(parts.length!==3)return;
 var payload=parts[1];
 var base64=payload.replace(/-/g,'+').replace(/_/g,'/');
 while(base64.length%4){base64+='=';}
 var data=JSON.parse(atob(base64));
-console.log('[Session] Google user data:',data);
 var session=getSession();
 var btcAddress=session&&session.btcAddress?session.btcAddress:($('btcAddress')?$('btcAddress').value.trim():'');
-if(!btcAddress){
-alert('Por favor, introduce tu dirección BTC antes de guardar la sesión.');
-return;
-}
+if(!btcAddress){alert('Introduce tu direccion BTC antes de guardar la sesion.');return}
 saveSession({
 googleId:data.sub,
 name:data.name,
@@ -443,190 +476,62 @@ btcAddress:btcAddress,
 savedAt:Date.now(),
 pending:false
 });
-log('SESSION SAVED as '+data.name);
-alert('✓ Sesión guardada como '+data.name+'\n\nLa próxima vez se restaurará automáticamente.');
+log('SESION GUARDADA como '+data.name);
 hideOverlay();
-}catch(e){
-console.error('[Session] handleGoogleCredential error:',e);
-alert('Error al procesar la sesión: '+e.message);
-}
+}catch(e){alert('Error al procesar la sesion: '+e.message)}
 }
 
 function askSaveSession(){
 var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
-console.log('[Session] askSaveSession called, btcAddress:',btcAddress);
-if(!btcAddress){
-console.log('[Session] No BTC address, skipping');
-return;
-}
-  setSessionContent(
-    '¿Guardar sesión?',
-    '¿Quieres guardar tu sesión para la próxima vez?',
-    [{text:'Sí',cls:'btn-primary',closeOverlay:false,action:function(){
-      console.log('[Session] User clicked Sí, showing Google login');
-      setSessionContent('Inicia sesión con Google','Tu dirección BTC se guardará con tu cuenta de Google',[],true);
-    }},{text:'No',cls:'btn-secondary',action:function(){
-      console.log('[Session] User clicked No');
-    }}],
-    false
-  );
+if(!btcAddress)return;
+setSessionContent(
+'Guardar sesion?',
+'Quieres guardar tu sesion para la proxima vez?',
+[{text:'Si',cls:'btn-primary',closeOverlay:false,action:function(){
+setSessionContent('Inicia sesion con Google','Tu direccion BTC se guardara con tu cuenta de Google',[],true);
+}},{text:'No',cls:'btn-secondary',action:function(){}}],
+false
+);
 }
 
 function restoreSavedSession(session){
-console.log('[Session] Restoring session for:',session.name);
 if($('btcAddress'))$('btcAddress').value=session.btcAddress;
-log('SESSION RESTORED: '+session.name+' ('+session.email+')');
-updateMinerStatusUI('RESTORED');
+log('SESION RESTAURADA: '+session.name);
 connectWS();
 }
 
 function checkSavedSession(){
-console.log('[Session] Checking saved session...');
 var session=getSession();
-if(!session){
-console.log('[Session] No saved session found');
-return;
-}
-console.log('[Session] Found session:',session);
+if(!session)return;
 if(session.pending){
-console.log('[Session] Session is pending, asking to save');
-setSessionContent('¿Guardar sesión?','Tu dirección BTC: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',closeOverlay:false,action:function(){setSessionContent('Inicia sesión con Google','Tu dirección BTC se guardará con tu cuenta de Google',[],true)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false);
+setSessionContent('Guardar sesion?','Tu direccion BTC: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Si',cls:'btn-primary',closeOverlay:false,action:function(){setSessionContent('Inicia sesion con Google','Tu direccion BTC se guardara con tu cuenta de Google',[],true)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false);
 }else if(session.name&&session.email){
-console.log('[Session] Complete session found, asking to restore');
-setSessionContent('¿Continuar como '+session.name+'?','Tu dirección BTC: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Sí',cls:'btn-primary',action:function(){restoreSavedSession(session)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false);
-}else{
-console.log('[Session] Incomplete session, ignoring');
+setSessionContent('Continuar como '+session.name+'?','Tu direccion BTC: '+session.btcAddress.substring(0,10)+'...'+session.btcAddress.substring(session.btcAddress.length-4),[{text:'Si',cls:'btn-primary',action:function(){restoreSavedSession(session)}},{text:'No',cls:'btn-secondary',action:function(){clearSession()}}],false);
 }
 }
-
-var REFERRAL_KEY='mining_btc_referral';
-var REFERRAL_BASE=window.location.origin+window.location.pathname;
-
-function getReferralData(){try{return JSON.parse(localStorage.getItem(REFERRAL_KEY))||{}}catch(e){return{}}}
-function saveReferralData(d){try{localStorage.setItem(REFERRAL_KEY,JSON.stringify(d))}catch(e){}}
-
-function generateReferralId(){
-var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
-var seed=btcAddress.length>=10?btcAddress:(navigator.userAgent+(window.screen?window.screen.width+'x'+window.screen.height:'')+(localStorage.getItem('ref_seed')||(function(){var s=Math.random().toString(36).slice(2,10);localStorage.setItem('ref_seed',s);return s})()));
-var hash=0;
-for(var i=0;i<seed.length;i++){hash=((hash<<5)-hash)+seed.charCodeAt(i);hash|=0}
-return Math.abs(hash).toString(36)+Date.now().toString(36).slice(-4)}
-
-function initReferralSystem(){
-console.log('[Referral] Initializing referral system...');
-var rid=generateReferralId();
-var refLink=REFERRAL_BASE+'?ref='+rid;
-console.log('[Referral] Generated link:',refLink);
-if($('referralLink')){$('referralLink').value=refLink;console.log('[Referral] Link set in input')}
-else{console.warn('[Referral] referralLink element not found')}
-var urlParams=new URLSearchParams(window.location.search);
-var incomingRef=urlParams.get('ref');
-if(incomingRef){
-var data=getReferralData();
-if(!data.referredBy){
-data.referredBy=incomingRef;
-data.referredAt=Date.now();
-saveReferralData(data);
-log('REFERRAL TRACKED: '+incomingRef)}}
-var data=getReferralData();
-if($('referralCount'))$('referralCount').textContent=String(data.referrals||0);
-if($('referralActive'))$('referralActive').textContent=String(data.activeReferrals||0)}
-
-if($('copyReferral'))$('copyReferral').onclick=function(){
-var input=$('referralLink');
-if(!input)return;
-input.select();
-try{
-navigator.clipboard.writeText(input.value);
-$('copyReferral').textContent='Copiado!';
-$('copyReferral').classList.add('copied');
-setTimeout(function(){$('copyReferral').textContent='Copiar';$('copyReferral').classList.remove('copied')},2000)
-}catch(e){document.execCommand('copy')}}
-
-function initDonateSystem(){
-var DONATE_ADDRESS='bc1qd2fu79gkkn8juju67t066jhwpw6r4t3plxsamn';
-if($('donateAddress'))$('donateAddress').value=DONATE_ADDRESS;
-generateQR(DONATE_ADDRESS);
-if($('copyDonate'))$('copyDonate').onclick=function(){
-var input=$('donateAddress');
-if(!input)return;
-input.select();
-try{
-navigator.clipboard.writeText(input.value);
-$('copyDonate').textContent='Copiado!';
-$('copyDonate').classList.add('copied');
-setTimeout(function(){$('copyDonate').textContent='Copiar';$('copyDonate').classList.remove('copied')},2000)
-}catch(e){document.execCommand('copy')}}}
-
-function generateQR(text){
-var canvas=$('donateQr');
-if(!canvas)return;
-var ctx=canvas.getContext('2d');
-var size=120;
-var modules=25;
-var cellSize=size/modules;
-ctx.fillStyle='#ffffff';
-ctx.fillRect(0,0,size,size);
-ctx.fillStyle='#000000';
-var data=text.split('');
-var seed=0;
-for(var i=0;i<text.length;i++){seed=((seed<<5)-seed)+text.charCodeAt(i);seed|=0}
-for(var row=0;row<modules;row++){
-for(var col=0;col<modules;col++){
-var isFinderPattern=(row<7&&col<7)||(row<7&&col>=modules-7)||(row>=modules-7&&col<7);
-if(isFinderPattern){
-var isOuter=row===0||row===6||col===0||col===6||row===modules-1||row===modules-7||col===modules-1||col===modules-7;
-var isInner=row>=2&&row<=4&&col>=2&&col<=4||row>=2&&row<=4&&col>=modules-5&&col<=modules-3||row>=modules-5&&row<=modules-3&&col>=2&&col<=4;
-if(isOuter||isInner){ctx.fillRect(col*cellSize,row*cellSize,cellSize,cellSize)}
-}else{
-seed=(seed*1103515245+12345)&0x7fffffff;
-if(seed%3!==0){ctx.fillRect(col*cellSize,row*cellSize,cellSize,cellSize)}}}}}
-
-function initAdBanner(){
-var banner=$('adBanner');
-if(!banner)return;
-banner.innerHTML='<div class="ad-placeholder"><span class="ad-label">Publicidad</span><span class="ad-text">Espacio publicitario disponible</span></div>'}
 
 if($('btcAddress')){
 $('btcAddress').addEventListener('input',function(){
 var btcAddress=$('btcAddress').value.trim();
 var existingSession=getSession();
 if(btcAddress.length>20&&(!existingSession||existingSession.pending)){
-saveSession({pending:true,btcAddress:btcAddress,savedAt:Date.now()});
-console.log('[Session] BTC address auto-saved:',btcAddress.substring(0,10)+'...');
-}
-initReferralSystem()});
-}
-
-console.log('[Session] Initializing Google...');
-if(typeof google!=='undefined'&&google.accounts){
-initGoogle();
-}else{
-window.addEventListener('load',function(){
-console.log('[Session] Window loaded, initializing Google...');
-initGoogle();
+saveSession({pending:true,btcAddress:btcAddress,savedAt:Date.now()})}
 });
 }
 
-(function initUI(){
-var url=window.BACKEND_URL||'';
-var host=url.replace(/wss?:\/\//,'').replace(/\/.*$/,'');
-if($('backendUrl'))$('backendUrl').textContent=host;
-if(host.indexOf('YOUR-RENDER')>=0||host.indexOf('REPLACE')>=0){
-console.warn('BACKEND_URL not configured. Edit frontend/config.js with your Render URL.');
-}})();
+if(typeof google!=='undefined'&&google.accounts){initGoogle()}
+else{window.addEventListener('load',function(){initGoogle()})}
+
+(function initUI(){})();
 
 (async function init(){
-log('SYSTEM INIT');
+log('SISTEMA INICIANDO');
 checkSavedSession();
-initReferralSystem();
-initDonateSystem();
-initAdBanner();
 var url=window.BACKEND_URL||'';
 if(url.indexOf('YOUR-RENDER')>=0||url.indexOf('REPLACE')>=0){
-log('BACKEND NOT CONFIGURED — EDIT frontend/config.js');
+log('BACKEND NO CONFIGURADO - EDITA frontend/config.js');
 updateNodePanel('DISCONNECTED');
-updateMinerStatusUI('NOT CONFIGURED');
+updateMinerStatusUI('NO CONFIGURADO');
 return}
 var backendOk=await checkBackend();
 if(backendOk){
@@ -636,10 +541,13 @@ if(statusTimer)clearInterval(statusTimer);
 statusTimer=setInterval(fetchBlockchainData,30000);
 if(refreshTimer)clearInterval(refreshTimer);
 refreshTimer=setInterval(fetchTemplateData,30000)}
-connectWS()})();
+})();
 
+var walletRequestId=0;
 async function fetchWalletBalance(){
-if(!sessionToken){console.log('[Wallet] No session token');return}
+if(!sessionToken)return;
+var requestId=++walletRequestId;
+var tokenAtRequest=sessionToken;
 var base=getBackendHttp();
 if(!base)return;
 try{
@@ -647,64 +555,59 @@ var r=await fetch(base+'/api/my-balance',{
 method:'GET',
 mode:'cors',
 signal:AbortSignal.timeout(30000),
-headers:{'Authorization':'Bearer '+sessionToken}
+headers:{'Authorization':'Bearer '+tokenAtRequest}
 });
 var d={};try{d=await r.json()}catch(e){}
-if(!r.ok||d.ok===false){
+if(requestId!==walletRequestId||tokenAtRequest!==sessionToken)return;
 if(r.status===401){
-console.warn('[Wallet] Account not verified (Google Sign-In required)');
-showWalletNotVerified();
+if(lastWalletData&&walletModalOpen)updateWalletUI(lastWalletData);
 return}
-console.error('[Wallet] Fetch failed:',d.error||r.status);return}
+if(!r.ok||d.ok===false)return;
+lastWalletData=d;
 updateWalletUI(d);
-console.log('[Wallet] Balance fetched:',d)
-}catch(e){console.error('[Wallet] Fetch error:',e.message)}}
+}catch(e){
+if(requestId!==walletRequestId||tokenAtRequest!==sessionToken)return;
+if(lastWalletData&&walletModalOpen)updateWalletUI(lastWalletData)
+}}
 
 function showWalletNotVerified(){
-if($('walletPending'))$('walletPending').textContent='---';
-if($('walletConfirmed'))$('walletConfirmed').textContent='---';
-if($('walletTotal'))$('walletTotal').textContent='---';
-if($('walletShares'))$('walletShares').textContent='---';
-if($('walletBlocks'))$('walletBlocks').textContent='---';
-if($('walletWindowShares'))$('walletWindowShares').textContent='---';
 var notice=$('walletNotVerified');
-if(notice){notice.style.display='block';notice.textContent='Account not verified. Sign in with Google to view your balance.'}}
+if(notice)notice.style.display='none';
+}
 
 function updateWalletUI(d){
-  if($('walletPending'))$('walletPending').textContent=fmtBtc(d.pending_sat||0);
-  if($('walletConfirmed'))$('walletConfirmed').textContent=fmtBtc(d.confirmed_sat||0);
-  if($('walletTotal'))$('walletTotal').textContent=fmtBtc(d.total_earned_sat||0);
-  if($('walletShares'))$('walletShares').textContent=String(d.shares_accepted||0);
-  if($('walletBlocks'))$('walletBlocks').textContent=String(d.blocks_found||0);
-  if($('walletWindowShares'))$('walletWindowShares').textContent=String(d.shares_in_window||0);
-  if($('walletMinPayout'))$('walletMinPayout').textContent=(d.min_payout_sat||0).toLocaleString()+' sat';
-  if($('walletPoolFee'))$('walletPoolFee').textContent=(d.pool_fee_percent||0)+'%';
-  if($('walletDryRun'))$('walletDryRun').style.display=d.payout_dry_run?'block':'none';
-  var notice=$('walletNotVerified');
-  if(notice)notice.style.display='none';
-  if($('walletEstimated')){
-    if(d.estimated_has_data){
-      $('walletEstimated').textContent=fmtBtc(d.estimated_sat||0);
-      $('walletEstimated').classList.remove('wallet-value-na');
-    }else{
-      $('walletEstimated').textContent='N/A';
-      $('walletEstimated').classList.add('wallet-value-na');
-    }
-  }
-  if($('walletEstimatedReference')){
-    if(d.estimated_has_data&&d.estimated_reference_height){
-      $('walletEstimatedReference').textContent='Ref: Block #'+d.estimated_reference_height;
-      $('walletEstimatedReference').style.display='block';
-    }else{
-      $('walletEstimatedReference').style.display='none';
-    }
-  }
-}
+if($('walletPending'))$('walletPending').textContent=fmtBtc(d.pending_sat||0);
+if($('walletConfirmed'))$('walletConfirmed').textContent=fmtBtc(d.confirmed_sat||0);
+if($('walletTotal'))$('walletTotal').textContent=fmtBtc(d.total_earned_sat||0);
+if($('walletShares'))$('walletShares').textContent=String(d.shares_accepted||0);
+if($('walletBlocks'))$('walletBlocks').textContent=String(d.blocks_found||0);
+if($('walletWindowShares'))$('walletWindowShares').textContent=String(d.shares_in_window||0);
+if($('walletMinPayout'))$('walletMinPayout').textContent=(d.min_payout_sat||0).toLocaleString()+' sat';
+if($('walletPoolFee'))$('walletPoolFee').textContent=(d.pool_fee_percent||0)+'%';
+if($('walletDryRun'))$('walletDryRun').style.display=d.payout_dry_run?'block':'none';
+var notice=$('walletNotVerified');
+if(notice){notice.style.display='none';notice.textContent=''}
+if($('walletEstimated')){
+if(d.estimated_has_data){
+$('walletEstimated').textContent=fmtBtc(d.estimated_sat||0);
+$('walletEstimated').classList.remove('wallet-value-na');
+}else{
+$('walletEstimated').textContent='N/D';
+$('walletEstimated').classList.add('wallet-value-na');
+}}
+if($('walletEstimatedReference')){
+if(d.estimated_has_data&&d.estimated_reference_height){
+$('walletEstimatedReference').textContent='Ref: Bloque #'+d.estimated_reference_height;
+$('walletEstimatedReference').style.display='block';
+}else{
+$('walletEstimatedReference').style.display='none';
+}}}
 
 function openWalletModal(){
 var m=$('walletModal');
 if(m)m.style.display='flex';
 walletModalOpen=true;
+if(lastWalletData)updateWalletUI(lastWalletData);
 fetchWalletBalance();
 startWalletPolling()}
 
@@ -728,8 +631,7 @@ var container=$('toastContainer');
 if(!container)return;
 var toast=document.createElement('div');
 toast.className='toast toast-'+(type||'info');
-var icons={reward:'&#9989;',info:'&#9888;',error:'&#10060;'};
-toast.innerHTML='<span class="toast-icon">'+(icons[type]||icons.info)+'</span><span class="toast-msg">'+msg+'</span>';
+toast.innerHTML='<span class="toast-msg">'+msg+'</span>';
 container.appendChild(toast);
 setTimeout(function(){
 toast.classList.add('toast-out');
@@ -740,3 +642,9 @@ if($('viewWallet'))$('viewWallet').onclick=openWalletModal;
 if($('closeWallet'))$('closeWallet').onclick=closeWalletModal;
 var backdrop=document.querySelector('.wallet-modal-backdrop');
 if(backdrop)backdrop.onclick=closeWalletModal;
+
+if($('downloadApp'))$('downloadApp').onclick=function(){
+var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+if(isIOS&&!navigator.standalone){log('iOS: Pulsa Compartir > Anadir a pantalla de inicio');return}
+log('APP NO DISPONIBLE PARA INSTALAR');
+};
