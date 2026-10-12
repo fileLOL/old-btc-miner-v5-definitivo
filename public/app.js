@@ -643,6 +643,41 @@ if($('closeWallet'))$('closeWallet').onclick=closeWalletModal;
 var backdrop=document.querySelector('.wallet-modal-backdrop');
 if(backdrop)backdrop.onclick=closeWalletModal;
 
+if($('requestPayout'))$('requestPayout').onclick=function(){
+var addr=$('payoutAddress')?$('payoutAddress').value.trim():'';
+var amount=$('payoutAmount')?parseFloat($('payoutAmount').value):0;
+if(!addr||addr.length<20){
+showToast('Direccion BTC no valida','error');
+return}
+if(!amount||amount<=0){
+showToast('Cantidad no valida','error');
+return}
+if(!sessionToken){
+showToast('Sesion no iniciada','error');
+return}
+var base=getBackendHttp();
+if(!base)return;
+fetch(base+'/api/request-payout',{
+method:'POST',
+mode:'cors',
+signal:AbortSignal.timeout(30000),
+headers:{
+'Content-Type':'application/json',
+'Authorization':'Bearer '+sessionToken
+},
+body:JSON.stringify({address:addr,amount_btc:amount})
+}).then(function(r){return r.json()}).then(function(d){
+if(d.ok){
+showToast('Solicitud de retiro registrada','reward');
+if($('payoutAmount'))$('payoutAmount').value='';
+}else{
+showToast(d.error||'Error al solicitar retiro','error')
+}
+}).catch(function(e){
+showToast('Error de conexion','error')
+})
+};
+
 if($('downloadApp'))$('downloadApp').onclick=function(){
 var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
 if(isIOS&&!navigator.standalone){log('iOS: Pulsa Compartir > Anadir a pantalla de inicio');return}

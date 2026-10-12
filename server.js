@@ -344,9 +344,36 @@ app.get('/api/my-balance',(req,res)=>{
       estimated_reference_height:estimation.reference_block_height,
       estimated_reference_coinbase_sat:estimation.reference_coinbase_sat,
       estimated_proportion:estimation.miner_proportion})}
-  catch(e){
+catch(e){
     console.error('Get my-balance error:',e.message);
     res.status(500).json({ok:false,error:e.message})}});
+
+app.post('/api/request-payout',(req,res)=>{
+const session=authenticateRequest(req);
+if(!session){return res.status(401).json({ok:false,error:'unauthorized'})}
+const{address,amount_btc}=req.body||{};
+if(!address||typeof address!=='string'){
+return res.status(400).json({ok:false,error:'address required'})}
+const validation=validateAddress(address);
+if(!validation.valid){
+return res.status(400).json({ok:false,error:'Invalid Bitcoin address: '+validation.error})}
+const amount_sat=Math.floor(parseFloat(amount_btc||'0')*1e8);
+if(!Number.isFinite(amount_sat)||amount_sat<=0){
+return res.status(400).json({ok:false,error:'Invalid amount'})}
+if(amount_sat<config.MIN_PAYOUT_SAT){
+return res.status(400).json({ok:false,error:'Amount below minimum payout: '+(config.MIN_PAYOUT_SAT/1e8)+' BTC'})}
+try{
+const balance=accountManager.getBalance(session.accountId);
+if(!balance||balance.confirmed_sat<amount_sat){
+return res.status(400).json({ok:false,error:'Insufficient confirmed balance'})}
+const db=getDb();
+const stmt=db.prepare('INSERT INTO payouts (account_id, amount_sat, status, created_at) VALUES (?, ?, ?, ?)');
+const result=stmt.run(session.accountId,amount_sat,'pending',Date.now());
+console.log(`[PayoutRequest] Account ${session.accountId} requested ${amount_sat} sat to ${address}`);
+res.json({ok:true,payout_id:result.lastInsertRowid,amount_sat,address})}
+catch(e){
+console.error('Request payout error:',e.message);
+res.status(500).json({ok:false,error:e.message})}});
 
 app.get('/api/pool-info',(_q,r)=>{
 try{

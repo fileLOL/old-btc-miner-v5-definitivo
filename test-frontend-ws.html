@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test WebSocket Connection</title>
+</head>
+<body>
+    <h1>WebSocket Test</h1>
+    <div id="log" style="font-family: monospace; white-space: pre; background: #000; color: #0f0; padding: 10px; height: 400px; overflow-y: scroll;"></div>
+    
+    <script>
+        const log = document.getElementById('log');
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString();
+            log.textContent += `[${time}] ${msg}\n`;
+            log.scrollTop = log.scrollHeight;
+            console.log(msg);
+        }
+        
+        const BACKEND_URL = 'wss://desktop-8imie7p.tailfdb082.ts.net';
+        
+        addLog('Starting WebSocket test...');
+        addLog(`Backend URL: ${BACKEND_URL}`);
+        addLog(`Full WebSocket URL: ${BACKEND_URL}/ws`);
+        
+        let ws;
+        
+        function connectWS() {
+            addLog('Attempting WebSocket connection...');
+            
+            try {
+                ws = new WebSocket(`${BACKEND_URL}/ws`);
+                addLog(`WebSocket object created, readyState: ${ws.readyState}`);
+            } catch (e) {
+                addLog(`ERROR creating WebSocket: ${e.message}`);
+                return;
+            }
+            
+            ws.onopen = function() {
+                addLog(`✓ WebSocket CONNECTED, readyState: ${ws.readyState}`);
+            };
+            
+            ws.onmessage = function(e) {
+                try {
+                    const msg = JSON.parse(e.data);
+                    addLog(`✓ Message received: ${msg.type}`);
+                    
+                    if (msg.type === 'welcome') {
+                        addLog(`  - minerId: ${msg.minerId}`);
+                        addLog(`  - version: ${msg.version}`);
+                        
+                        // Send register
+                        setTimeout(() => {
+                            const registerMsg = {
+                                type: 'register',
+                                btcAddress: 'bc1qd2fu79gkkn8juju67t066jhwpw6r4t3plxsamn'
+                            };
+                            ws.send(JSON.stringify(registerMsg));
+                            addLog('✓ Register message sent');
+                        }, 500);
+                    }
+                    
+                    if (msg.type === 'registered') {
+                        addLog(`  - accountId: ${msg.accountId}`);
+                        addLog(`  - verified: ${msg.verified}`);
+                    }
+                    
+                    if (msg.type === 'newJob') {
+                        addLog(`  - jobId: ${msg.jobId}`);
+                        addLog(`  - height: ${msg.height}`);
+                        addLog(`  - hasHeader: ${!!msg.header}`);
+                        addLog(`  - hasMidstate: ${!!msg.midstate}`);
+                        addLog(`  - coinbasevalue: ${msg.coinbasevalue}`);
+                        addLog('\n✓ TEST SUCCESSFUL - Mining can start!');
+                    }
+                } catch (e) {
+                    addLog(`ERROR parsing message: ${e.message}`);
+                }
+            };
+            
+            ws.onerror = function(e) {
+                addLog(`✗ WebSocket ERROR`);
+                addLog(`  readyState: ${ws ? ws.readyState : 'null'}`);
+            };
+            
+            ws.onclose = function(e) {
+                addLog(`✗ WebSocket CLOSED`);
+                addLog(`  code: ${e.code}`);
+                addLog(`  reason: ${e.reason}`);
+                addLog(`  wasClean: ${e.wasClean}`);
+            };
+        }
+        
+        // Start connection after 1 second
+        setTimeout(connectWS, 1000);
+    </script>
+</body>
+</html>

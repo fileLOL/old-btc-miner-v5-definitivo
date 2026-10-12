@@ -183,18 +183,13 @@
 </div>
 <div class="wallet-section">
 <div class="wallet-section-title">Introducir/enviar bitcoin</div>
-<div class="wallet-row-balance">
-<span class="wallet-balance-label">Shares aceptadas</span>
-<span class="wallet-balance-value" id="walletShares">0</span>
+<div class="wallet-input-wrap" style="margin-bottom:12px">
+<input type="text" id="payoutAddress" placeholder="Direccion BTC destino" class="wallet-input" autocomplete="off" spellcheck="false" aria-label="Direccion Bitcoin destino">
 </div>
-<div class="wallet-row-balance">
-<span class="wallet-balance-label">Bloques encontrados</span>
-<span class="wallet-balance-value" id="walletBlocks">0</span>
+<div class="wallet-input-wrap" style="margin-bottom:12px">
+<input type="number" id="payoutAmount" placeholder="Cantidad en BTC" class="wallet-input" step="0.00000001" min="0" autocomplete="off" aria-label="Cantidad en BTC">
 </div>
-<div class="wallet-row-balance">
-<span class="wallet-balance-label">Shares en ventana PPLNS</span>
-<span class="wallet-balance-value" id="walletWindowShares">0</span>
-</div>
+<button id="requestPayout" class="btn btn-primary" style="width:100%;padding:14px;font-size:15px;font-weight:600">Solicitar retiro</button>
 </div>
 <div class="wallet-section wallet-info-section">
 <div class="wallet-info-row">
