@@ -1,4 +1,4 @@
-var CACHE_NAME='miningbtc-v9';
+var CACHE_NAME='miningbtc-v10';
 var ASSETS=['/','/index.html','/style.css','/app.js','/config.js','/sha256d.js','/icon.svg','/manifest.json'];
 self.addEventListener('install',function(e){self.skipWaiting();e.waitUntil(caches.open(CACHE_NAME).then(function(c){return c.addAll(ASSETS)}))});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(keys){return Promise.all(keys.filter(function(k){return k!==CACHE_NAME}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});
