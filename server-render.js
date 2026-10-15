@@ -120,6 +120,7 @@ let bitcoinCoreOnline = false;
 let stratumClient = null;
 let stratumConnected = false;
 let localJobTimer = null;
+let lastJobReceivedAt = 0;
 
 async function generateLocalJob() {
   try {
@@ -150,6 +151,7 @@ async function generateLocalJob() {
 function initStratum() {
   stratumClient = new StratumClient(config, jobManager);
   stratumClient.onNewJob = (job) => {
+    lastJobReceivedAt = Date.now();
     broadcastJob(job);
   };
   stratumClient.onShare = (status, info) => {
@@ -176,6 +178,14 @@ function initStratum() {
       // Internal miner hashrate report
     }
   };
+
+  setInterval(() => {
+    if (stratumConnected && Date.now() - lastJobReceivedAt > 60000 && !localJobTimer) {
+      localJobTimer = setInterval(generateLocalJob, 30000);
+      generateLocalJob();
+      console.log('[LocalJob] Started (no jobs received for 60s)');
+    }
+  }, 15000);
   stratumClient.connect();
 }
 
@@ -679,10 +689,10 @@ server.listen(PORT, '0.0.0.0', async () => {
   payoutMonitor.start();
 
   setTimeout(() => {
-    if (!stratumConnected) {
+    if (!stratumConnected || Date.now() - lastJobReceivedAt > 30000) {
       localJobTimer = setInterval(generateLocalJob, 30000);
       generateLocalJob();
-      console.log('[LocalJob] Started fallback (Stratum not connected after 15s)');
+      console.log('[LocalJob] Started fallback (Stratum not connected or no jobs received)');
     }
   }, 15000);
 
