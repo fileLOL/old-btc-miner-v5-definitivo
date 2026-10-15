@@ -20,7 +20,7 @@ services:
       - key: SHARE_DIFFICULTY
         value: "10000000"
       - key: CORS_ORIGIN
-        sync: false
+        value: "https://mining-btc.vercel.app"
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: MAX_MINERS
