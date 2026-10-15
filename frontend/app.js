@@ -255,6 +255,7 @@ else if(msg.type==='poolStats'){updatePoolUI(msg)}
 else if(msg.type==='blockFound'){log('BLOCK FOUND BY '+msg.minerId+' AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK FOUND!')}
 else if(msg.type==='blockAccepted'){log('BLOCK ACCEPTED AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK ACCEPTED!')}
 else if(msg.type==='blockRejected'){log('BLOCK REJECTED: '+msg.reason)}
+else if(msg.type==='ping'){try{ws.send(JSON.stringify({type:'pong'}))}catch(e){}}
 else if(msg.type==='pong'){}
 else if(msg.type==='error'){log('ERROR: '+msg.error)}};
 ws.onclose=function(){

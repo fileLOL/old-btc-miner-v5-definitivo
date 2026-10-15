@@ -119,6 +119,33 @@ let lastTemplateHeight = null;
 let bitcoinCoreOnline = false;
 let stratumClient = null;
 let stratumConnected = false;
+let localJobTimer = null;
+
+async function generateLocalJob() {
+  try {
+    const blocks = await MempoolAPI.getLatestBlocks(1);
+    if (!blocks || blocks.length === 0) return;
+    const lastBlock = blocks[0];
+    const header = await MempoolAPI.getBlockHeader(lastBlock.id);
+    const template = {
+      version: header.version,
+      previousblockhash: header.previousblockhash,
+      target: '0000000000000000000000000000000000000000000000000000000000000000',
+      bits: header.bits,
+      curtime: Math.floor(Date.now() / 1000),
+      height: header.height + 1,
+      coinbasevalue: 312500000,
+      transactions: [],
+      default_witness_commitment: null
+    };
+    const job = jobManager.setTemplate(template);
+    job.isLocal = true;
+    console.log(`[LocalJob] Generated job for height ${job.height}, jobId: ${job.jobId}`);
+    broadcastJob(job);
+  } catch (e) {
+    console.error('[LocalJob] Error generating job:', e.message);
+  }
+}
 
 function initStratum() {
   stratumClient = new StratumClient(config, jobManager);
@@ -140,9 +167,11 @@ function initStratum() {
     if (status === 'connected') {
       stratumConnected = true;
       console.log('[Stratum] Pool connected');
+      if (localJobTimer) { clearInterval(localJobTimer); localJobTimer = null; console.log('[LocalJob] Stopped (Stratum connected)'); }
     } else if (status === 'disconnected') {
       stratumConnected = false;
       console.log('[Stratum] Pool disconnected');
+      if (!localJobTimer) { localJobTimer = setInterval(generateLocalJob, 30000); generateLocalJob(); console.log('[LocalJob] Started (Stratum disconnected)'); }
     } else if (status === 'mining') {
       // Internal miner hashrate report
     }
@@ -455,6 +484,14 @@ app.get('/api/admin/test-payout/state', (_q, res) => {
 
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
+setInterval(() => {
+  wss.clients.forEach(ws => {
+    if (ws.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify({ type: 'ping' })) } catch {}
+    }
+  })
+}, 25000);
+
 wss.on('connection', (ws, req) => {
   const minerId = 'miner_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
   const registered = minerTracker.register(minerId, ws);
@@ -556,7 +593,8 @@ function handleMessage(ws, minerId, msg) {
     const miner = minerTracker.getMiner(minerId);
     if (miner && miner.accountId) { AuditLog.logShare(miner.accountId, result.jobId, config.SHARE_DIFFICULTY || 1) }
     ws.send(JSON.stringify({ type: 'shareAccepted', jobId: result.jobId, nonce: result.nonce }));
-    if (stratumClient && stratumClient.connected) {
+    const job = jobManager.getJob(result.jobId);
+    if (stratumClient && stratumClient.connected && job && !job.isLocal) {
       stratumClient.submitBrowserShare(result.jobId, result.nonce, result.hashHex, result.meetsBlockTarget);
     }
     if (result.meetsBlockTarget) {
@@ -639,6 +677,14 @@ server.listen(PORT, '0.0.0.0', async () => {
   startBroadcastLoop();
   blockMonitor.start();
   payoutMonitor.start();
+
+  setTimeout(() => {
+    if (!stratumConnected) {
+      localJobTimer = setInterval(generateLocalJob, 30000);
+      generateLocalJob();
+      console.log('[LocalJob] Started fallback (Stratum not connected after 15s)');
+    }
+  }, 15000);
 
   const payoutInterval = setInterval(async () => {
     try {
