@@ -87,6 +87,33 @@
   font-size: 12px;
   line-height: 1.5;
 }
+.wallet-save-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.wallet-save-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .82);
+}
+.wallet-save-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 100%);
+  padding: 22px;
+  background: #151a22;
+  color: #edf2f7;
+  border: 1px solid #343d4b;
+  border-radius: 12px;
+  box-shadow: 0 20px 70px rgba(0,0,0,.5);
+}
+.wallet-save-dialog .wallet-modal-title { margin-bottom: 10px; }
+.wallet-save-dialog .wallet-estimated-disclaimer { margin-bottom: 14px; }
 .wallet-dry-run {
   padding: 12px;
   background: #342719;

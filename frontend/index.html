@@ -200,9 +200,6 @@
 </div>
 <div class="wallet-section">
 <div class="wallet-section-title">Saldo</div>
-<p id="walletGooglePrompt" class="wallet-estimated-disclaimer" style="display:none">¿Quieres guardar esta cartera con Google para consultar el saldo después?</p>
-<button id="saveWalletGoogle" class="btn btn-wallet" type="button" style="display:none">Guardar cartera con Google</button>
-<div id="googleSignin" aria-label="Guardar cartera con Google" style="display:none;margin-top:12px"></div>
 <div class="wallet-row-balance">
 <span class="wallet-balance-label">Pendiente</span>
 <span class="wallet-balance-value pending" id="walletPending">0 sat</span>
@@ -238,6 +235,16 @@
 <div id="walletDryRun" class="wallet-dry-run" style="display:block">Los retiros manuales están deshabilitados mientras se completa una gestión segura de destinos y reservas. Los pagos automáticos permanecen en modo de prueba.</div>
 </div>
 </div>
+</div>
+</div>
+
+<div id="walletSavePrompt" class="wallet-save-prompt" style="display:none">
+<div class="wallet-save-backdrop"></div>
+<div class="wallet-save-dialog" role="dialog" aria-modal="true" aria-labelledby="walletSaveTitle">
+<div class="wallet-modal-title" id="walletSaveTitle">¿Quieres guardar tu cartera?</div>
+<p class="wallet-estimated-disclaimer">Guárdala con Google para consultar el saldo después. La minería se detendrá cuando termines o elijas no guardarla.</p>
+<div id="googleSignin" aria-label="Guardar cartera con Google" style="display:none;margin:16px 0"></div>
+<button id="declineWalletSave" class="btn btn-secondary" type="button" style="width:100%">No guardar y detener minería</button>
 </div>
 </div>
 
