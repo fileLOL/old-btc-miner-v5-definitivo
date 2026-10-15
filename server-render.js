@@ -689,12 +689,19 @@ server.listen(PORT, '0.0.0.0', async () => {
   payoutMonitor.start();
 
   setTimeout(() => {
-    if (!stratumConnected || Date.now() - lastJobReceivedAt > 30000) {
+    if (!stratumConnected || Date.now() - lastJobReceivedAt > 30000 || !jobManager.getCurrentJob()) {
       localJobTimer = setInterval(generateLocalJob, 30000);
       generateLocalJob();
-      console.log('[LocalJob] Started fallback (Stratum not connected or no jobs received)');
+      console.log('[LocalJob] Started fallback');
     }
-  }, 15000);
+  }, 10000);
+
+  setTimeout(() => {
+    if (!jobManager.getCurrentJob()) {
+      generateLocalJob();
+      console.log('[LocalJob] Forced job generation');
+    }
+  }, 20000);
 
   const payoutInterval = setInterval(async () => {
     try {
