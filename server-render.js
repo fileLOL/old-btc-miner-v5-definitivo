@@ -21,22 +21,35 @@ const AuditLog = require('./lib/audit');
 const TestPayoutRunner = require('./lib/test-payout-runner');
 const MempoolAPI = require('./lib/mempool-api');
 const StratumClient = require('./lib/stratum-client');
+const { verifyGoogleIdToken } = require('./lib/google-auth');
+const apiSessions = require('./lib/api-session');
 
 const app = express();
 const server = http.createServer(app);
 const PORT = config.PORT;
 
 app.use((req, res, next) => {
-  const origin = config.CORS_ORIGIN;
-  if (origin === '*') { res.header('Access-Control-Allow-Origin', '*') }
-  else if (origin && origin.split(',').map(s => s.trim()).includes(req.headers.origin)) { res.header('Access-Control-Allow-Origin', req.headers.origin) }
+  const allowedOrigins = String(config.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+  }
   res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next()
 });
 
 app.use(express.json({ limit: '16mb' }));
+
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+function authenticateVerifiedRequest(req) {
+  const match = /^Bearer ([a-f0-9]{64})$/.exec(req.headers.authorization || '');
+  if (!match) return null;
+  const db = getDb();
+  return apiSessions.authenticate(db, match[1], { ttlMs: SESSION_TTL_MS });
+}
 
 let db;
 try { db = getDb() } catch (e) { console.error('Database init error:', e.message) }
@@ -67,6 +80,11 @@ function calculateBlockHash(blockHex) {
   const hash1 = crypto.createHash('sha256').update(headerBuf).digest();
   const hash2 = crypto.createHash('sha256').update(hash1).digest();
   return Buffer.from(hash2).reverse().toString('hex')
+}
+
+function getBlockSubsidySat(height) {
+  const halvings = Math.floor(height / 210000);
+  return halvings >= 64 ? 0 : Number(5000000000n >> BigInt(halvings));
 }
 
 // HTTP JSON-RPC call to Bitcoin Core
@@ -146,6 +164,8 @@ async function generateLocalJob() {
     const bitsInt = block.bits;
     const bitsHex = (bitsInt >>> 0).toString(16).padStart(8, '0');
     const targetHex = bitsToTargetHex(bitsInt);
+    const height = block.height + 1;
+    const coinbasevalue = getBlockSubsidySat(height);
 
     const template = {
       version: block.version >>> 0,
@@ -153,8 +173,8 @@ async function generateLocalJob() {
       target: targetHex,
       bits: bitsHex,
       curtime: Math.floor(Date.now() / 1000),
-      height: block.height + 1,
-      coinbasevalue: 312500000,
+      height,
+      coinbasevalue,
       transactions: [],
       default_witness_commitment: null
     };
@@ -172,7 +192,14 @@ function initStratum() {
   stratumClient.onNewJob = (job) => {
     lastJobReceivedAt = Date.now();
     if (localJobTimer) { clearInterval(localJobTimer); localJobTimer = null; console.log('[LocalJob] Stopped (Stratum jobs arriving)'); }
-    broadcastJob(job);
+    MempoolAPI.getLatestBlocks(1).then((blocks) => {
+      if (!job.height && blocks && blocks.length) job.height = blocks[0].height + 1;
+      if (!job.coinbasevalue) job.coinbasevalue = getBlockSubsidySat(job.height);
+      broadcastJob(job);
+    }).catch((e) => {
+      console.error('[Stratum] Could not load block height for job metadata:', e.message);
+      broadcastJob(job);
+    });
   };
   stratumClient.onShare = (status, info) => {
     if (status === 'accepted') {
@@ -209,7 +236,7 @@ function initStratum() {
 }
 
 function broadcastJob(job) {
-  const msg = JSON.stringify({ type: 'newJob', jobId: job.jobId, height: job.height, header: job.header, midstate: job.midstate, shareTarget: job.shareTarget, blockTarget: job.blockTarget, nonceStart: 0, nonceEnd: 4294967295 });
+  const msg = JSON.stringify({ type: 'newJob', jobId: job.jobId, height: job.height, header: job.header, midstate: job.midstate, shareTarget: job.shareTarget, blockTarget: job.blockTarget, nonceStart: 0, nonceEnd: 4294967295, bits: job.nbits || job.bits, previousblockhash: job.previousblockhash, coinbasevalue: job.coinbasevalue || 0 });
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       try { client.send(msg) } catch {}
@@ -279,7 +306,7 @@ app.get('/api/template', async (_q, r) => {
     height: job.height || 0,
     bits: job.nbits || job.bits || '---',
     target: job.blockTarget ? Buffer.from(job.blockTarget).toString('hex') : '---',
-    coinbasevalue: job.coinbasevalue || 312500000,
+    coinbasevalue: job.coinbasevalue || 0,
     tx_count: 0,
     source: 'stratum-pool',
     jobId: job.jobId
@@ -316,28 +343,7 @@ app.post('/api/send', async (req, res) => {
 });
 
 app.post('/api/register-miner', (req, res) => {
-  try {
-    const { btcAddress } = req.body || {};
-    if (!btcAddress || typeof btcAddress !== 'string') {
-      return res.status(400).json({ ok: false, error: 'btcAddress required' })
-    }
-    const validation = validateAddress(btcAddress);
-    if (!validation.valid) {
-      return res.status(400).json({ ok: false, error: 'Invalid Bitcoin address: ' + validation.error })
-    }
-    const account = accountManager.getOrCreateAccount(btcAddress);
-    const minerId = 'miner_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-    const wsConn = null;
-    const registered = minerTracker.register(minerId, wsConn, account.account_id);
-    if (!registered) {
-      return res.status(503).json({ ok: false, error: 'Pool full, max miners reached' })
-    }
-    const session = accountManager.getSession(minerId);
-    res.json({ ok: true, minerId, accountId: account.account_id, btcAddress: account.btc_address, isNew: account.isNew })
-  } catch (e) {
-    console.error('Register miner error:', e.message);
-    res.status(500).json({ ok: false, error: e.message })
-  }
+  res.status(410).json({ ok: false, error: 'Register through the authenticated WebSocket connection.' });
 });
 
 app.get('/api/miner/:minerId/stats', (req, res) => {
@@ -351,20 +357,13 @@ app.get('/api/miner/:minerId/stats', (req, res) => {
     if (!stats.accountId) {
       return res.json({ ok: true, registered: false, minerId, shares: stats.shares, hashrate: stats.hashrate, lastSeen: stats.lastSeen })
     }
-    const account = accountManager.getAccount(stats.accountId);
-    const balance = accountManager.getBalance(stats.accountId);
-    const totalShares = accountManager.getShareCountByAccount(stats.accountId);
     res.json({
       ok: true,
       registered: true,
       minerId,
-      accountId: stats.accountId,
-      btcAddress: account ? account.btc_address : null,
       shares: stats.shares,
-      totalShares,
       hashrate: stats.hashrate,
       lastSeen: stats.lastSeen,
-      balance: balance ? { confirmed_sat: balance.confirmed_sat, pending_sat: balance.pending_sat, total_earned_sat: balance.total_earned_sat } : null
     })
   } catch (e) {
     console.error('Get miner stats error:', e.message);
@@ -374,15 +373,11 @@ app.get('/api/miner/:minerId/stats', (req, res) => {
 
 app.get('/api/my-stats', (req, res) => {
   try {
-    const { minerId } = req.query;
-    if (!minerId) { return res.status(400).json({ ok: false, error: 'minerId required' }) }
-    const miner = minerTracker.getMiner(minerId);
-    if (!miner || !miner.accountId) {
-      return res.status(404).json({ ok: false, error: 'Miner not found or not registered' })
-    }
-    const stats = rewardEngine.getAccountStats(miner.accountId);
+    const session = authenticateVerifiedRequest(req);
+    if (!session) return res.status(401).json({ ok: false, error: 'Verified Google session required' });
+    const stats = rewardEngine.getAccountStats(session.account_id);
     if (!stats) { return res.status(404).json({ ok: false, error: 'Account not found' }) }
-    const windowStats = rewardEngine.getSharesInWindow(miner.accountId, config.PPLNS_WINDOW_SIZE);
+    const windowStats = rewardEngine.getSharesInWindow(session.account_id, config.PPLNS_WINDOW_SIZE);
     res.json({
       ok: true,
       account_id: stats.account_id,
@@ -399,14 +394,43 @@ app.get('/api/my-stats', (req, res) => {
         confirmed_btc: (stats.balance.confirmed_sat / 1e8).toFixed(8),
         total_earned_btc: (stats.balance.total_earned_sat / 1e8).toFixed(8)
       },
-      hashrate: miner.hashrate,
-      lastSeen: miner.lastSeen
+      hashrate: 0,
+      lastSeen: null
     })
   } catch (e) {
     console.error('Get my-stats error:', e.message);
     res.status(500).json({ ok: false, error: e.message })
   }
 });
+
+app.get('/api/auth-config', (_q, r) => r.json({ googleClientId: config.GOOGLE_CLIENT_ID || null }));
+
+app.get('/api/my-balance', (req, res) => {
+  const session = authenticateVerifiedRequest(req);
+  if (!session) return res.status(401).json({ ok: false, error: 'Verified Google session required' });
+  try {
+    const stats = rewardEngine.getAccountStats(session.account_id);
+    if (!stats || !stats.balance) return res.status(404).json({ ok: false, error: 'Account not found' });
+    const estimate = typeof rewardEngine.getEstimatedReward === 'function'
+      ? rewardEngine.getEstimatedReward(session.account_id, config.PPLNS_WINDOW_SIZE, config.POOL_FEE_PERCENT)
+      : { estimated_sat: 0, has_valid_data: false };
+    return res.json({ ok: true, verified: true,
+      pending_sat: stats.balance.pending_sat, confirmed_sat: stats.balance.confirmed_sat,
+      total_earned_sat: stats.balance.total_earned_sat,
+      pool_fee_percent: config.POOL_FEE_PERCENT, payout_dry_run: config.PAYOUT_DRY_RUN,
+      min_payout_sat: config.MIN_PAYOUT_SAT, estimated_sat: estimate.estimated_sat || 0,
+      estimated_has_data: !!estimate.has_valid_data,
+      estimated_reference_height: estimate.reference_block_height || null });
+  } catch (error) {
+    console.error('Wallet balance query failed:', error.message);
+    return res.status(500).json({ ok: false, error: 'Unable to load wallet balance' });
+  }
+});
+
+app.post('/api/request-payout', (_req, res) => res.status(503).json({
+  ok: false,
+  error: 'Manual withdrawals are disabled until payout destination, reservation, and duplicate handling are implemented safely.'
+}));
 
 app.get('/api/pool-info', (_q, r) => {
   try {
@@ -551,12 +575,16 @@ wss.on('connection', (ws, req) => {
     if (!rateLimiter.check(minerId, 'message')) { ws.close(1008, 'Rate limit exceeded'); return }
     try {
       const msg = JSON.parse(data.toString());
-      handleMessage(ws, minerId, msg)
+      handleMessage(ws, minerId, msg).catch(() => {})
     } catch {}
   });
 
   ws.on('close', () => {
     if (ws.registrationTimeout) clearTimeout(ws.registrationTimeout);
+    if (ws.sessionToken) {
+      try { apiSessions.revoke(getDb(), ws.sessionToken); } catch {}
+      ws.sessionToken = null;
+    }
     minerTracker.unregister(minerId);
     console.log(`Miner disconnected: ${minerId} (total: ${minerTracker.getMinerCount()})`)
   });
@@ -564,7 +592,7 @@ wss.on('connection', (ws, req) => {
   ws.on('error', (err) => { console.error(`WebSocket error for ${minerId}:`, err.message) })
 });
 
-function handleMessage(ws, minerId, msg) {
+async function handleMessage(ws, minerId, msg) {
   if (!msg || typeof msg !== 'object') return;
   minerTracker.updateSeen(minerId);
 
@@ -573,7 +601,7 @@ function handleMessage(ws, minerId, msg) {
       ws.send(JSON.stringify({ type: 'error', error: 'Already registered' }));
       return
     }
-    const { btcAddress } = msg;
+    const { btcAddress, googleToken } = msg;
     if (!btcAddress || typeof btcAddress !== 'string') {
       ws.send(JSON.stringify({ type: 'registerFailed', error: 'btcAddress required' }));
       return
@@ -584,14 +612,41 @@ function handleMessage(ws, minerId, msg) {
       return
     }
     try {
+      const google = await verifyGoogleIdToken(googleToken, config.GOOGLE_CLIENT_ID);
+      if (!google.valid) {
+        ws.send(JSON.stringify({ type: 'registerFailed', error: google.error || 'Verified Google sign-in required for wallet access' }));
+        return;
+      }
       const account = accountManager.getOrCreateAccount(btcAddress);
+      const db = getDb();
+      const existingIdentity = db.prepare('SELECT google_id FROM account_identities WHERE account_id=?').get(account.account_id);
+      if (!existingIdentity && !account.isNew) {
+        ws.send(JSON.stringify({ type: 'registerFailed', error: 'This existing miner account has no verified Google identity and cannot be claimed.' }));
+        return;
+      }
+      if (existingIdentity && existingIdentity.google_id !== google.googleId) {
+        ws.send(JSON.stringify({ type: 'registerFailed', error: 'This miner account is linked to a different Google account' }));
+        return;
+      }
+      const identityForGoogle = db.prepare('SELECT account_id FROM account_identities WHERE google_id=?').get(google.googleId);
+      if (identityForGoogle && identityForGoogle.account_id !== account.account_id) {
+        ws.send(JSON.stringify({ type: 'registerFailed', error: 'This Google account is already linked to another miner account' }));
+        return;
+      }
+      if (!existingIdentity) {
+        db.prepare('INSERT INTO account_identities (account_id,google_id,email,display_name,verified_at) VALUES (?,?,?,?,?)')
+          .run(account.account_id, google.googleId, google.email, google.name, Date.now());
+      }
+      const token = apiSessions.createSession(db, account.account_id, google.googleId);
+      ws.sessionToken = token;
       const userAgent = ws.upgradeReq?.headers?.['user-agent'] || null;
       minerTracker.linkAccount(minerId, account.account_id, userAgent);
       ws.registered = true;
       ws.accountId = account.account_id;
       if (ws.registrationTimeout) clearTimeout(ws.registrationTimeout);
-      ws.send(JSON.stringify({ type: 'registered', accountId: account.account_id, btcAddress: account.btc_address, isNew: account.isNew }));
-      console.log(`Miner ${minerId} registered with account ${account.account_id} (${account.btc_address})`)
+      ws.send(JSON.stringify({ type: 'registered', btcAddress: account.btc_address, isNew: account.isNew, verified: true }));
+      ws.send(JSON.stringify({ type: 'sessionToken', token }));
+      console.log(`Miner ${minerId} registered with a verified account`)
     } catch (e) {
       console.error('Registration error:', e.message);
       ws.send(JSON.stringify({ type: 'registerFailed', error: e.message }))

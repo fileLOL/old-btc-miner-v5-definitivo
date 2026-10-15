@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mining BTC</title>
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/wallet-styles.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -89,9 +90,12 @@
 <input type="text" id="btcAddress" placeholder="bc1q..." class="wallet-input" autocomplete="off" spellcheck="false" aria-label="Bitcoin wallet address">
 </div>
 </div>
+<div id="googleSignin" aria-label="Iniciar sesión con Google" style="margin:12px 0"></div>
 <div class="controls">
 <button id="start" class="btn btn-primary" aria-label="Start mining">Start Mining</button>
 <button id="stop" class="btn btn-stop" aria-label="Stop mining">Stop Mining</button>
+<button id="viewWallet" class="btn btn-wallet" aria-label="Ver billetera">Mi billetera</button>
+<button id="reconnectBtn" class="btn btn-secondary" aria-label="Reconectar" style="display:none">Reconectar</button>
 </div>
 </section>
 
@@ -177,6 +181,63 @@
 </section>
 
 </main>
+
+<div id="walletModal" class="wallet-modal" style="display:none">
+<div class="wallet-modal-backdrop"></div>
+<div class="wallet-modal-content">
+<div class="wallet-modal-header">
+<div class="wallet-modal-title">Mi Billetera</div>
+<button id="closeWallet" class="wallet-modal-close" aria-label="Cerrar">&times;</button>
+</div>
+<div class="wallet-modal-body">
+<div class="wallet-section">
+<div class="wallet-section-title">Estimacion de ganancia</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Estimacion</span>
+<span class="wallet-balance-value estimated" id="walletEstimated">N/D</span>
+</div>
+<div class="wallet-estimated-reference" id="walletEstimatedReference" style="display:none"></div>
+<div class="wallet-estimated-disclaimer">Simulacion basada en el ultimo bloque maduro y tus shares en la ventana PPLNS. No es una promesa de pago.</div>
+</div>
+<div class="wallet-section">
+<div class="wallet-section-title">Saldo</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Pendiente</span>
+<span class="wallet-balance-value pending" id="walletPending">0 sat</span>
+</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Confirmado</span>
+<span class="wallet-balance-value confirmed" id="walletConfirmed">0 sat</span>
+</div>
+<div class="wallet-row-balance">
+<span class="wallet-balance-label">Total ganado</span>
+<span class="wallet-balance-value total-earned" id="walletTotal">0 sat</span>
+</div>
+</div>
+<div class="wallet-section">
+<div class="wallet-section-title">Solicitar un retiro</div>
+<div class="wallet-input-wrap" style="margin-bottom:12px">
+<input type="text" id="payoutAddress" placeholder="Direccion BTC destino" class="wallet-input" autocomplete="off" spellcheck="false" aria-label="Direccion Bitcoin destino">
+</div>
+<div class="wallet-input-wrap" style="margin-bottom:12px">
+<input type="number" id="payoutAmount" placeholder="Cantidad en BTC" class="wallet-input" step="0.00000001" min="0" autocomplete="off" aria-label="Cantidad en BTC">
+</div>
+<button id="requestPayout" class="btn btn-primary" style="width:100%;padding:14px;font-size:15px;font-weight:600">Solicitar retiro</button>
+</div>
+<div class="wallet-section wallet-info-section">
+<div class="wallet-info-row">
+<span class="wallet-info-label">Pago minimo:</span>
+<span class="wallet-info-value" id="walletMinPayout">---</span>
+</div>
+<div class="wallet-info-row">
+<span class="wallet-info-label">Comision del pool:</span>
+<span class="wallet-info-value" id="walletPoolFee">---</span>
+</div>
+<div id="walletDryRun" class="wallet-dry-run" style="display:block">Los retiros manuales están deshabilitados mientras se completa una gestión segura de destinos y reservas. Los pagos automáticos permanecen en modo de prueba.</div>
+</div>
+</div>
+</div>
+</div>
 
 <footer class="status-bar">
 <div class="status-bar-left">

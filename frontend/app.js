@@ -6,6 +6,34 @@ var myShares=0,rejectedCount=0;
 var exhausted=0,total=0,lastRate=performance.now(),hashes=0;
 var refreshTimer=null,statusTimer=null,wsHeartbeatTimer=null;
 var wsRetries=0,wsMaxRetries=0,wsReconnectTimer=null,wsBaseDelay=3000,wsMaxDelay=60000;
+var sessionToken=null,walletPollTimer=null,walletModalOpen=false;
+var lastWalletData=null;
+var walletRequestId=0;
+var googleIdToken=null;
+
+function registerWebSocketMiner(){
+if(!ws||ws.readyState!==1||!googleIdToken)return;
+var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
+if(!btcAddress){log('BTC ADDRESS REQUIRED FOR MINING');return}
+try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress,googleToken:googleIdToken}));log('REGISTERING VERIFIED ACCOUNT...')}catch(e){log('REGISTER FAILED: '+e.message)}
+}
+
+async function setupGoogleSignIn(){
+try{
+var conf=await getJSON(getBackendHttp()+'/api/auth-config');
+if(!conf.googleClientId){log('WALLET ACCESS DISABLED: GOOGLE_CLIENT_ID IS NOT CONFIGURED');return}
+var script=document.createElement('script');script.src='https://accounts.google.com/gsi/client';script.async=true;script.defer=true;
+script.onload=function(){
+if(!window.google||!$('googleSignin'))return;
+google.accounts.id.initialize({client_id:conf.googleClientId,callback:function(response){
+googleIdToken=response.credential||null;
+if(googleIdToken){log('GOOGLE ACCOUNT VERIFIED');registerWebSocketMiner()}
+}});
+google.accounts.id.renderButton($('googleSignin'),{theme:'outline',size:'large',text:'signin_with'});
+};
+document.head.appendChild(script);
+}catch(e){log('GOOGLE SIGN-IN UNAVAILABLE: '+e.message)}
+}
 
 function getBackendHttp(){
 var u=window.BACKEND_URL||'';
@@ -238,9 +266,7 @@ wsRetries=0;
 wsHeartbeatTimer=setInterval(function(){
 if(ws&&ws.readyState===1){try{ws.send(JSON.stringify({type:'ping'}))}catch(e){}}
 },30000);
-var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
-if(!btcAddress){log('BTC ADDRESS REQUIRED FOR MINING');return}
-try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress}));log('REGISTERING...')}catch(e){log('REGISTER FAILED: '+e.message)}};
+registerWebSocketMiner()};
 ws.onmessage=function(e){
 var msg=JSON.parse(e.data);
 if(msg.type==='welcome'){minerId=msg.minerId;log('MINER ID: '+minerId)}
@@ -255,6 +281,9 @@ else if(msg.type==='poolStats'){updatePoolUI(msg)}
 else if(msg.type==='blockFound'){log('BLOCK FOUND BY '+msg.minerId+' AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK FOUND!')}
 else if(msg.type==='blockAccepted'){log('BLOCK ACCEPTED AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK ACCEPTED!')}
 else if(msg.type==='blockRejected'){log('BLOCK REJECTED: '+msg.reason)}
+else if(msg.type==='sessionToken'){sessionToken=msg.token;log('SESION AUTENTICADA');if(walletModalOpen)fetchWalletBalance();startWalletPolling()}
+else if(msg.type==='balanceUpdate'){if(walletModalOpen){lastWalletData=Object.assign({},lastWalletData||{},msg);updateWalletUI(msg)}log('SALDO ACTUALIZADO')}
+else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' acreditado (bloque '+msg.block_height+')','reward');if(walletModalOpen){if(lastWalletData){lastWalletData.pending_sat=msg.pending_sat||0;lastWalletData.confirmed_sat=msg.confirmed_sat||0;lastWalletData.total_earned_sat=msg.total_earned_sat||0}updateWalletUI(msg)}log('RECOMPENSA: +'+fmtBtc(msg.reward_sat))}
 else if(msg.type==='ping'){try{ws.send(JSON.stringify({type:'pong'}))}catch(e){}}
 else if(msg.type==='pong'){}
 else if(msg.type==='error'){log('ERROR: '+msg.error)}};
@@ -342,8 +371,109 @@ var backendOk=await checkBackend();
 if(backendOk){
 await fetchBlockchainData();
 await fetchTemplateData();
+setupGoogleSignIn();
 if(statusTimer)clearInterval(statusTimer);
 statusTimer=setInterval(fetchBlockchainData,30000);
 if(refreshTimer)clearInterval(refreshTimer);
 refreshTimer=setInterval(fetchTemplateData,30000)}
 connectWS()})();
+
+// === WALLET ===
+async function fetchWalletBalance(){
+if(!sessionToken)return;
+var requestId=++walletRequestId;
+var tokenAtRequest=sessionToken;
+var base=getBackendHttp();
+if(!base)return;
+try{
+var r=await fetch(base+'/api/my-balance',{headers:{'Authorization':'Bearer '+sessionToken}});
+var d={};try{d=await r.json()}catch(e){}
+if(requestId!==walletRequestId||tokenAtRequest!==sessionToken)return;
+if(r.status===401){
+if(lastWalletData&&walletModalOpen)updateWalletUI(lastWalletData);
+return}
+if(!r.ok||d.ok===false)return;
+lastWalletData=d;
+updateWalletUI(d);
+}catch(e){
+if(requestId!==walletRequestId||tokenAtRequest!==sessionToken)return;
+if(lastWalletData&&walletModalOpen)updateWalletUI(lastWalletData)
+}}
+
+function updateWalletUI(d){
+if($('walletPending'))$('walletPending').textContent=fmtBtc(d.pending_sat||0);
+if($('walletConfirmed'))$('walletConfirmed').textContent=fmtBtc(d.confirmed_sat||0);
+if($('walletTotal'))$('walletTotal').textContent=fmtBtc(d.total_earned_sat||0);
+if($('walletMinPayout'))$('walletMinPayout').textContent=(d.min_payout_sat||0).toLocaleString()+' sat';
+if($('walletPoolFee'))$('walletPoolFee').textContent=(d.pool_fee_percent||0)+'%';
+if($('walletDryRun'))$('walletDryRun').style.display=d.payout_dry_run?'block':'none';
+if($('walletEstimated')){
+if(d.estimated_has_data){
+$('walletEstimated').textContent=fmtBtc(d.estimated_sat||0);
+$('walletEstimated').classList.remove('wallet-value-na');
+}else{
+$('walletEstimated').textContent='N/D';
+$('walletEstimated').classList.add('wallet-value-na');
+}}
+if($('walletEstimatedReference')){
+if(d.estimated_has_data&&d.estimated_reference_height){
+$('walletEstimatedReference').textContent='Ref: Bloque #'+d.estimated_reference_height;
+$('walletEstimatedReference').style.display='block';
+}else{
+$('walletEstimatedReference').style.display='none';
+}}}
+
+function openWalletModal(){
+var m=$('walletModal');
+if(m)m.style.display='flex';
+walletModalOpen=true;
+if(lastWalletData)updateWalletUI(lastWalletData);
+fetchWalletBalance();
+startWalletPolling()}
+
+function closeWalletModal(){
+var m=$('walletModal');
+if(m)m.style.display='none';
+walletModalOpen=false;
+stopWalletPolling()}
+
+function startWalletPolling(){
+stopWalletPolling();
+walletPollTimer=setInterval(function(){
+if(walletModalOpen&&sessionToken)fetchWalletBalance()
+},10000)}
+
+function stopWalletPolling(){
+if(walletPollTimer){clearInterval(walletPollTimer);walletPollTimer=null}}
+
+function showToast(msg,type){
+var container=$('toastContainer');
+if(!container){container=document.createElement('div');container.id='toastContainer';container.style.cssText='position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px';document.body.appendChild(container)}
+var t=document.createElement('div');
+t.className='toast toast-'+(type||'info');
+t.textContent=msg;
+t.style.cssText='padding:12px 20px;border-radius:8px;font-size:14px;font-weight:500;color:#fff;opacity:0;transition:opacity 0.3s;'+(type==='error'?'background:#e74c3c':type==='success'?'background:#27ae60':type==='reward'?'background:#f39c12':'background:#3498db');
+container.appendChild(t);
+requestAnimationFrame(function(){t.style.opacity='1'});
+setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove()},300)},4000)}
+
+if($('viewWallet'))$('viewWallet').onclick=openWalletModal;
+if($('closeWallet'))$('closeWallet').onclick=closeWalletModal;
+var backdrop=document.querySelector('.wallet-modal-backdrop');
+if(backdrop)backdrop.onclick=closeWalletModal;
+
+if($('requestPayout'))$('requestPayout').onclick=function(){
+var addr=$('payoutAddress')?$('payoutAddress').value.trim():'';
+var amount=$('payoutAmount')?parseFloat($('payoutAmount').value):0;
+if(!addr||addr.length<20){showToast('Adreça BTC invàlida','error');return}
+if(!amount||amount<=0){showToast('Quantitat invàlida','error');return}
+if(!sessionToken){showToast('Sessió no iniciada','error');return}
+var base=getBackendHttp();
+fetch(base+'/api/request-payout',{
+method:'POST',
+headers:{'Content-Type':'application/json','Authorization':'Bearer '+sessionToken},
+body:JSON.stringify({address:addr,amount_btc:amount})
+}).then(function(r){return r.json()}).then(function(d){
+if(d.ok){showToast('Retirada sol·licitada','success');$('payoutAmount').value=''}
+else{showToast(d.error||'Error','error')}
+}).catch(function(e){showToast('Error de connexió','error')})};

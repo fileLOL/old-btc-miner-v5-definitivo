@@ -1,0 +1,101 @@
+
+/* WALLET MODAL */
+.btn-wallet {
+  background: #d99b25;
+  color: #171717;
+  border: 1px solid #f0bd54;
+}
+.btn-wallet:hover { filter: brightness(1.08); }
+
+.wallet-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.wallet-modal:not([style*="display:none"]) {
+  display: flex;
+}
+.wallet-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, .78);
+}
+.wallet-modal-content {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #151a22;
+  color: #edf2f7;
+  border: 1px solid #343d4b;
+  border-radius: 12px;
+  box-shadow: 0 20px 70px rgba(0,0,0,.5);
+}
+.wallet-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid #343d4b;
+}
+.wallet-modal-title { font-size: 20px; font-weight: 700; }
+.wallet-modal-close {
+  background: transparent;
+  border: 0;
+  color: #edf2f7;
+  font-size: 28px;
+  cursor: pointer;
+}
+.wallet-modal-body { padding: 18px; }
+.wallet-section {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #1d2430;
+  border: 1px solid #343d4b;
+  border-radius: 8px;
+}
+.wallet-section-title {
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.wallet-row-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #343d4b;
+}
+.wallet-row-balance:last-child { border-bottom: 0; }
+.wallet-balance-label { color: #aab5c5; }
+.wallet-balance-value { font-weight: 700; overflow-wrap: anywhere; }
+.wallet-balance-value.estimated { color: #f0bd54; }
+.wallet-balance-value.pending { color: #f0bd54; }
+.wallet-balance-value.confirmed { color: #65d6a2; }
+.wallet-balance-value.total-earned { color: #78b7ff; }
+.wallet-estimated-reference,
+.wallet-estimated-disclaimer,
+.wallet-dry-run {
+  margin-top: 10px;
+  color: #aab5c5;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.wallet-dry-run {
+  padding: 12px;
+  background: #342719;
+  border: 1px solid #80602d;
+  border-radius: 6px;
+  color: #ffd994;
+}
+@media (max-width: 600px) {
+  .wallet-modal { padding: 10px; }
+  .wallet-modal-content { max-height: 95vh; }
+  .wallet-modal-body { padding: 12px; }
+}

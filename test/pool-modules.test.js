@@ -182,7 +182,10 @@ const blockTargetBuf=Buffer.from(sj.blockTarget);
 let shareBigInt=0n,blockBigInt=0n;
 for(let i=0;i<32;i++){shareBigInt=(shareBigInt<<8n)|BigInt(shareTargetBuf[i]);blockBigInt=(blockBigInt<<8n)|BigInt(blockTargetBuf[i])}
 assert(shareBigInt>blockBigInt,'share target > block target (easier)');
-assert.strictEqual(shareBigInt,blockBigInt*4n,'share target = block target * difficulty');
+const maxTarget=(1n<<256n)-1n;
+assert.strictEqual(shareBigInt,maxTarget/4n,'share target = max target / configured share difficulty');
+const expectedShareSeconds=10000000/3000000;
+assert(Math.abs(expectedShareSeconds-(10/3))<1e-9,'10M shares at 3 MH/s averages about 3.33 seconds');
 console.log('  PASS\n');
 
 mt.destroy();mt2.destroy();rl.destroy();

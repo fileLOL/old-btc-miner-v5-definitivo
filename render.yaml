@@ -18,9 +18,11 @@ services:
       - key: PAYOUT_ADDRESS
         sync: false
       - key: SHARE_DIFFICULTY
-        value: "7000000000000000"
+        value: "10000000"
       - key: CORS_ORIGIN
-        value: "*"
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
       - key: MAX_MINERS
         value: "100"
       - key: POOL_FEE_PERCENT
