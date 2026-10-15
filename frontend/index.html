@@ -90,7 +90,6 @@
 <input type="text" id="btcAddress" placeholder="bc1q..." class="wallet-input" autocomplete="off" spellcheck="false" aria-label="Bitcoin wallet address">
 </div>
 </div>
-<div id="googleSignin" aria-label="Iniciar sesión con Google" style="margin:12px 0"></div>
 <div class="controls">
 <button id="start" class="btn btn-primary" aria-label="Start mining">Start Mining</button>
 <button id="stop" class="btn btn-stop" aria-label="Stop mining">Stop Mining</button>
@@ -201,6 +200,9 @@
 </div>
 <div class="wallet-section">
 <div class="wallet-section-title">Saldo</div>
+<p id="walletGooglePrompt" class="wallet-estimated-disclaimer" style="display:none">¿Quieres guardar esta cartera con Google para consultar el saldo después?</p>
+<button id="saveWalletGoogle" class="btn btn-wallet" type="button" style="display:none">Guardar cartera con Google</button>
+<div id="googleSignin" aria-label="Guardar cartera con Google" style="display:none;margin-top:12px"></div>
 <div class="wallet-row-balance">
 <span class="wallet-balance-label">Pendiente</span>
 <span class="wallet-balance-value pending" id="walletPending">0 sat</span>

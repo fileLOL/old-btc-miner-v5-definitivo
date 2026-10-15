@@ -10,29 +10,46 @@ var sessionToken=null,walletPollTimer=null,walletModalOpen=false;
 var lastWalletData=null;
 var walletRequestId=0;
 var googleIdToken=null;
+var googleSignInLoading=false,googleWidgetReady=false,walletSaved=false,pendingStopAfterAuth=false,pendingExitSave=false;
 
 function registerWebSocketMiner(){
 if(!ws||ws.readyState!==1||!googleIdToken)return;
 var btcAddress=$('btcAddress')?$('btcAddress').value.trim():'';
 if(!btcAddress){log('BTC ADDRESS REQUIRED FOR MINING');return}
-try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress,googleToken:googleIdToken}));log('REGISTERING VERIFIED ACCOUNT...')}catch(e){log('REGISTER FAILED: '+e.message)}
+try{ws.send(JSON.stringify({type:'register',btcAddress:btcAddress,googleToken:googleIdToken}));log('SAVING VERIFIED WALLET...')}catch(e){log('REGISTER FAILED: '+e.message)}
 }
 
 async function setupGoogleSignIn(){
+var container=$('googleSignin');
+if(!container)return;
+container.style.display='block';
+if(googleWidgetReady&&window.google)return;
+if(googleSignInLoading)return;
+googleSignInLoading=true;
 try{
 var conf=await getJSON(getBackendHttp()+'/api/auth-config');
-if(!conf.googleClientId){log('WALLET ACCESS DISABLED: GOOGLE_CLIENT_ID IS NOT CONFIGURED');return}
+if(!conf.googleClientId){log('GOOGLE WALLET SAVING IS NOT CONFIGURED');googleSignInLoading=false;return}
 var script=document.createElement('script');script.src='https://accounts.google.com/gsi/client';script.async=true;script.defer=true;
 script.onload=function(){
+googleSignInLoading=false;
 if(!window.google||!$('googleSignin'))return;
 google.accounts.id.initialize({client_id:conf.googleClientId,callback:function(response){
 googleIdToken=response.credential||null;
-if(googleIdToken){log('GOOGLE ACCOUNT VERIFIED');registerWebSocketMiner()}
+if(googleIdToken){log('GOOGLE ACCOUNT VERIFIED');if(!ws||ws.readyState!==1)connectWS();registerWebSocketMiner()}
 }});
-google.accounts.id.renderButton($('googleSignin'),{theme:'outline',size:'large',text:'signin_with'});
+googleWidgetReady=true;
+google.accounts.id.renderButton($('googleSignin'),{theme:'outline',size:'large',text:'continue_with'});
 };
+script.onerror=function(){googleSignInLoading=false;log('GOOGLE SIGN-IN UNAVAILABLE')};
 document.head.appendChild(script);
-}catch(e){log('GOOGLE SIGN-IN UNAVAILABLE: '+e.message)}
+}catch(e){googleSignInLoading=false;log('GOOGLE SIGN-IN UNAVAILABLE: '+e.message)}
+}
+
+function beginWalletGoogleSave(){
+var address=$('btcAddress')?$('btcAddress').value.trim():'';
+if(!address){showToast('Introduce primero tu dirección BTC','error');if($('btcAddress'))$('btcAddress').focus();return}
+if(sessionToken){fetchWalletBalance();return}
+setupGoogleSignIn();
 }
 
 function getBackendHttp(){
@@ -281,7 +298,7 @@ else if(msg.type==='poolStats'){updatePoolUI(msg)}
 else if(msg.type==='blockFound'){log('BLOCK FOUND BY '+msg.minerId+' AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK FOUND!')}
 else if(msg.type==='blockAccepted'){log('BLOCK ACCEPTED AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK ACCEPTED!')}
 else if(msg.type==='blockRejected'){log('BLOCK REJECTED: '+msg.reason)}
-else if(msg.type==='sessionToken'){sessionToken=msg.token;log('SESION AUTENTICADA');if(walletModalOpen)fetchWalletBalance();startWalletPolling()}
+else if(msg.type==='sessionToken'){sessionToken=msg.token;walletSaved=true;try{localStorage.setItem('btc_wallet_google_saved','1')}catch(e){};log('GOOGLE WALLET SAVED');if($('walletGooglePrompt'))$('walletGooglePrompt').style.display='none';if($('saveWalletGoogle'))$('saveWalletGoogle').style.display='none';if($('googleSignin'))$('googleSignin').style.display='none';if(walletModalOpen)fetchWalletBalance();startWalletPolling();if(pendingStopAfterAuth){pendingStopAfterAuth=false;stopMiningNow()}}
 else if(msg.type==='balanceUpdate'){if(walletModalOpen){lastWalletData=Object.assign({},lastWalletData||{},msg);updateWalletUI(msg)}log('SALDO ACTUALIZADO')}
 else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' acreditado (bloque '+msg.block_height+')','reward');if(walletModalOpen){if(lastWalletData){lastWalletData.pending_sat=msg.pending_sat||0;lastWalletData.confirmed_sat=msg.confirmed_sat||0;lastWalletData.total_earned_sat=msg.total_earned_sat||0}updateWalletUI(msg)}log('RECOMPENSA: +'+fmtBtc(msg.reward_sat))}
 else if(msg.type==='ping'){try{ws.send(JSON.stringify({type:'pong'}))}catch(e){}}
@@ -323,6 +340,16 @@ updateMinerStatusUI('MINING');
 startWorkers()}
 
 function stopMining(){
+var address=$('btcAddress')?$('btcAddress').value.trim():'';
+if(running&&address&&!walletSaved&&!sessionToken){
+if(window.confirm('¿Quieres guardar tu cartera con Google antes de cerrar la minería?')){
+pendingStopAfterAuth=true;
+ openWalletModal(true);
+beginWalletGoogleSave();
+return}}
+stopMiningNow()}
+
+function stopMiningNow(){
 running=false;
 stopWorkers();
 updateMinerStatusUI('STOPPED');
@@ -342,6 +369,7 @@ console.warn('BACKEND_URL not configured. Edit frontend/config.js with your Rend
 
 (function restoreWallet(){
 try{
+walletSaved=localStorage.getItem('btc_wallet_google_saved')==='1';
 var saved=localStorage.getItem('btc_wallet_address');
 if(saved&&$('btcAddress')){
 $('btcAddress').value=saved;
@@ -423,10 +451,13 @@ $('walletEstimatedReference').style.display='block';
 $('walletEstimatedReference').style.display='none';
 }}}
 
-function openWalletModal(){
+function openWalletModal(showSavePrompt){
 var m=$('walletModal');
 if(m)m.style.display='flex';
 walletModalOpen=true;
+if($('walletGooglePrompt'))$('walletGooglePrompt').style.display=showSavePrompt&&!sessionToken?'block':'none';
+if($('saveWalletGoogle'))$('saveWalletGoogle').style.display=showSavePrompt&&!sessionToken?'inline-block':'none';
+if($('googleSignin'))$('googleSignin').style.display='none';
 if(lastWalletData)updateWalletUI(lastWalletData);
 fetchWalletBalance();
 startWalletPolling()}
@@ -435,7 +466,8 @@ function closeWalletModal(){
 var m=$('walletModal');
 if(m)m.style.display='none';
 walletModalOpen=false;
-stopWalletPolling()}
+stopWalletPolling();
+if(pendingStopAfterAuth){pendingStopAfterAuth=false;stopMiningNow()}}
 
 function startWalletPolling(){
 stopWalletPolling();
@@ -458,6 +490,7 @@ requestAnimationFrame(function(){t.style.opacity='1'});
 setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove()},300)},4000)}
 
 if($('viewWallet'))$('viewWallet').onclick=openWalletModal;
+if($('saveWalletGoogle'))$('saveWalletGoogle').onclick=beginWalletGoogleSave;
 if($('closeWallet'))$('closeWallet').onclick=closeWalletModal;
 var backdrop=document.querySelector('.wallet-modal-backdrop');
 if(backdrop)backdrop.onclick=closeWalletModal;
@@ -477,3 +510,17 @@ body:JSON.stringify({address:addr,amount_btc:amount})
 if(d.ok){showToast('Retirada sol·licitada','success');$('payoutAmount').value=''}
 else{showToast(d.error||'Error','error')}
 }).catch(function(e){showToast('Error de connexió','error')})};
+
+window.addEventListener('beforeunload',function(event){
+var address=$('btcAddress')?$('btcAddress').value.trim():'';
+if(!address||walletSaved||sessionToken)return;
+event.preventDefault();
+event.returnValue='';
+pendingExitSave=true;
+setTimeout(function(){
+if(pendingExitSave&&!document.hidden){
+pendingExitSave=false;
+ openWalletModal(true);
+setupGoogleSignIn()
+}},0)
+});
