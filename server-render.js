@@ -122,6 +122,20 @@ let stratumConnected = false;
 let localJobTimer = null;
 let lastJobReceivedAt = 0;
 
+function bitsToTargetHex(bitsInt) {
+  const exponent = (bitsInt >>> 24) & 0xFF;
+  const mantissa = bitsInt & 0x007FFFFF;
+  let target = 0n;
+  if (exponent <= 3) {
+    target = BigInt(mantissa >> (8 * (3 - exponent)));
+  } else {
+    target = BigInt(mantissa) << BigInt(8 * (exponent - 3));
+  }
+  let hex = target.toString(16).padStart(64, '0');
+  if (hex.length > 64) hex = hex.slice(0, 64);
+  return hex;
+}
+
 async function generateLocalJob() {
   try {
     const blocks = await MempoolAPI.getLatestBlocks(1);
@@ -131,11 +145,12 @@ async function generateLocalJob() {
 
     const bitsInt = block.bits;
     const bitsHex = (bitsInt >>> 0).toString(16).padStart(8, '0');
+    const targetHex = bitsToTargetHex(bitsInt);
 
     const template = {
       version: block.version >>> 0,
       previousblockhash: block.previousblockhash,
-      target: '0000000000000000000000000000000000000000000000000000000000000000',
+      target: targetHex,
       bits: bitsHex,
       curtime: Math.floor(Date.now() / 1000),
       height: block.height + 1,
@@ -264,6 +279,8 @@ app.get('/api/template', async (_q, r) => {
     height: job.height || 0,
     bits: job.nbits || job.bits || '---',
     target: job.blockTarget ? Buffer.from(job.blockTarget).toString('hex') : '---',
+    coinbasevalue: job.coinbasevalue || 312500000,
+    tx_count: 0,
     source: 'stratum-pool',
     jobId: job.jobId
   });

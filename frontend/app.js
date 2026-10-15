@@ -311,6 +311,25 @@ if(host.indexOf('YOUR-RENDER')>=0||host.indexOf('REPLACE')>=0){
 console.warn('BACKEND_URL not configured. Edit frontend/config.js with your Render URL.');
 }})();
 
+(function restoreWallet(){
+try{
+var saved=localStorage.getItem('btc_wallet_address');
+if(saved&&$('btcAddress')){
+$('btcAddress').value=saved;
+log('WALLET RESTORED: '+saved.substring(0,8)+'...'+saved.substring(saved.length-4));
+}
+}catch(e){}
+})();
+
+if($('btcAddress')){
+$('btcAddress').addEventListener('input',function(){
+var btcAddress=$('btcAddress').value.trim();
+if(btcAddress.length>20){
+try{localStorage.setItem('btc_wallet_address',btcAddress)}catch(e){}
+}
+});
+}
+
 (async function init(){
 log('SYSTEM INIT');
 var url=window.BACKEND_URL||'';
