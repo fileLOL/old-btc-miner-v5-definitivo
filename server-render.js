@@ -244,10 +244,10 @@ app.get('/api/status', async (_q, r) => {
       headers: chainInfo.headers,
       verificationProgress: chainInfo.verificationprogress,
       difficulty: miningInfo.difficulty,
-      networkHashps: miningInfo.networkhashps,
+      networkhashps: miningInfo.networkhashps,
       warnings: miningInfo.warnings || '',
-      bitcoin_core: stratumConnected ? 'online' : 'offline',
-      source: stratumConnected ? 'stratum-pool' : 'mempool-space',
+      bitcoin_core: (stratumConnected || jobManager.getCurrentJob()) ? 'online' : 'offline',
+      source: stratumConnected ? 'stratum-pool' : 'local-mining',
       pool: stratumClient ? stratumClient.getStatus() : null
     })
   } catch (e) {
