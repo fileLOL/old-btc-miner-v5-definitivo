@@ -127,21 +127,25 @@ async function generateLocalJob() {
     const blocks = await MempoolAPI.getLatestBlocks(1);
     if (!blocks || blocks.length === 0) return;
     const lastBlock = blocks[0];
-    const header = await MempoolAPI.getBlockHeader(lastBlock.id);
+    const block = await MempoolAPI.getBlock(lastBlock.id);
+
+    const bitsInt = block.bits;
+    const bitsHex = (bitsInt >>> 0).toString(16).padStart(8, '0');
+
     const template = {
-      version: header.version,
-      previousblockhash: header.previousblockhash,
+      version: block.version >>> 0,
+      previousblockhash: block.previousblockhash,
       target: '0000000000000000000000000000000000000000000000000000000000000000',
-      bits: header.bits,
+      bits: bitsHex,
       curtime: Math.floor(Date.now() / 1000),
-      height: header.height + 1,
+      height: block.height + 1,
       coinbasevalue: 312500000,
       transactions: [],
       default_witness_commitment: null
     };
     const job = jobManager.setTemplate(template);
     job.isLocal = true;
-    console.log(`[LocalJob] Generated job for height ${job.height}, jobId: ${job.jobId}`);
+    console.log(`[LocalJob] Generated job for height ${job.height}, jobId: ${job.jobId}, bits: ${bitsHex}`);
     broadcastJob(job);
   } catch (e) {
     console.error('[LocalJob] Error generating job:', e.message);
@@ -152,6 +156,7 @@ function initStratum() {
   stratumClient = new StratumClient(config, jobManager);
   stratumClient.onNewJob = (job) => {
     lastJobReceivedAt = Date.now();
+    if (localJobTimer) { clearInterval(localJobTimer); localJobTimer = null; console.log('[LocalJob] Stopped (Stratum jobs arriving)'); }
     broadcastJob(job);
   };
   stratumClient.onShare = (status, info) => {
@@ -169,24 +174,23 @@ function initStratum() {
     if (status === 'connected') {
       stratumConnected = true;
       console.log('[Stratum] Pool connected');
-      if (localJobTimer) { clearInterval(localJobTimer); localJobTimer = null; console.log('[LocalJob] Stopped (Stratum connected)'); }
     } else if (status === 'disconnected') {
       stratumConnected = false;
       console.log('[Stratum] Pool disconnected');
-      if (!localJobTimer) { localJobTimer = setInterval(generateLocalJob, 30000); generateLocalJob(); console.log('[LocalJob] Started (Stratum disconnected)'); }
-    } else if (status === 'mining') {
-      // Internal miner hashrate report
     }
   };
+  stratumClient.connect();
 
+  // Fallback: generate local jobs if no Stratum jobs arrive
   setInterval(() => {
-    if (stratumConnected && Date.now() - lastJobReceivedAt > 60000 && !localJobTimer) {
+    const hasJob = jobManager.getCurrentJob() !== null;
+    const jobsStale = !hasJob || (Date.now() - lastJobReceivedAt > 60000);
+    if (jobsStale && !localJobTimer) {
       localJobTimer = setInterval(generateLocalJob, 30000);
       generateLocalJob();
-      console.log('[LocalJob] Started (no jobs received for 60s)');
+      console.log('[LocalJob] Started fallback (no jobs for 60s or no job exists)');
     }
   }, 15000);
-  stratumClient.connect();
 }
 
 function broadcastJob(job) {
@@ -687,21 +691,6 @@ server.listen(PORT, '0.0.0.0', async () => {
   startBroadcastLoop();
   blockMonitor.start();
   payoutMonitor.start();
-
-  setTimeout(() => {
-    if (!stratumConnected || Date.now() - lastJobReceivedAt > 30000 || !jobManager.getCurrentJob()) {
-      localJobTimer = setInterval(generateLocalJob, 30000);
-      generateLocalJob();
-      console.log('[LocalJob] Started fallback');
-    }
-  }, 10000);
-
-  setTimeout(() => {
-    if (!jobManager.getCurrentJob()) {
-      generateLocalJob();
-      console.log('[LocalJob] Forced job generation');
-    }
-  }, 20000);
 
   const payoutInterval = setInterval(async () => {
     try {
