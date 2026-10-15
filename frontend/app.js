@@ -342,7 +342,7 @@ stopMiningNow()}
 
 function openWalletSavePrompt(){
 var prompt=$('walletSavePrompt');
-if(prompt)prompt.style.display='flex';
+if(prompt)prompt.style.display='block';
 setupGoogleSignIn()}
 
 function dismissWalletSavePrompt(){

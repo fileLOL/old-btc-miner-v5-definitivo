@@ -238,13 +238,12 @@
 </div>
 </div>
 
-<div id="walletSavePrompt" class="wallet-save-prompt" style="display:none">
-<div class="wallet-save-backdrop"></div>
-<div class="wallet-save-dialog" role="dialog" aria-modal="true" aria-labelledby="walletSaveTitle">
+<div id="walletSavePrompt" class="wallet-save-toast" style="display:none" role="region" aria-label="Guardar cartera">
+<div class="wallet-save-card">
 <div class="wallet-modal-title" id="walletSaveTitle">¿Quieres guardar tu cartera?</div>
-<p class="wallet-estimated-disclaimer">Guárdala con Google para consultar el saldo después. La minería se detendrá cuando termines o elijas no guardarla.</p>
+<p class="wallet-estimated-disclaimer">Guárdala con Google para consultar el saldo después.</p>
 <div id="googleSignin" aria-label="Guardar cartera con Google" style="display:none;margin:16px 0"></div>
-<button id="declineWalletSave" class="btn btn-secondary" type="button" style="width:100%">No guardar y detener minería</button>
+<button id="declineWalletSave" class="btn btn-secondary" type="button" style="width:100%">No guardar</button>
 </div>
 </div>
 

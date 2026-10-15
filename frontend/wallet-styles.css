@@ -87,24 +87,16 @@
   font-size: 12px;
   line-height: 1.5;
 }
-.wallet-save-prompt {
+.wallet-save-toast {
   position: fixed;
-  inset: 0;
   z-index: 10001;
   display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  right: 20px;
+  bottom: 20px;
+  width: min(380px, calc(100vw - 32px));
+  animation: wallet-save-toast-in .2s ease-out;
 }
-.wallet-save-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, .82);
-}
-.wallet-save-dialog {
-  position: relative;
-  z-index: 1;
-  width: min(420px, 100%);
+.wallet-save-card {
   padding: 22px;
   background: #151a22;
   color: #edf2f7;
@@ -112,8 +104,12 @@
   border-radius: 12px;
   box-shadow: 0 20px 70px rgba(0,0,0,.5);
 }
-.wallet-save-dialog .wallet-modal-title { margin-bottom: 10px; }
-.wallet-save-dialog .wallet-estimated-disclaimer { margin-bottom: 14px; }
+.wallet-save-card .wallet-modal-title { margin-bottom: 10px; }
+.wallet-save-card .wallet-estimated-disclaimer { margin-bottom: 14px; }
+@keyframes wallet-save-toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .wallet-dry-run {
   padding: 12px;
   background: #342719;
@@ -125,4 +121,6 @@
   .wallet-modal { padding: 10px; }
   .wallet-modal-content { max-height: 95vh; }
   .wallet-modal-body { padding: 12px; }
+  .wallet-save-toast { right: 16px; bottom: 16px; }
+  .wallet-save-card { padding: 18px; }
 }
