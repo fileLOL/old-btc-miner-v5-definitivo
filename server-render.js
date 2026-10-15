@@ -236,7 +236,7 @@ function initStratum() {
 }
 
 function broadcastJob(job) {
-  const msg = JSON.stringify({ type: 'newJob', jobId: job.jobId, height: job.height, header: job.header, midstate: job.midstate, shareTarget: job.shareTarget, blockTarget: job.blockTarget, nonceStart: 0, nonceEnd: 4294967295, bits: job.nbits || job.bits, previousblockhash: job.previousblockhash, coinbasevalue: job.coinbasevalue || 0 });
+  const msg = JSON.stringify({ type: 'newJob', jobId: job.jobId, height: job.height, header: job.header, midstate: job.midstate, shareTarget: job.shareTarget, blockTarget: job.blockTarget, nonceStart: 0, nonceEnd: 4294967295, bits: job.nbits || job.bits, previousblockhash: job.previousblockhash || job.prevhash || null, coinbasevalue: job.coinbasevalue || 0 });
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       try { client.send(msg) } catch {}
@@ -305,6 +305,7 @@ app.get('/api/template', async (_q, r) => {
     ok: true,
     height: job.height || 0,
     bits: job.nbits || job.bits || '---',
+    previousblockhash: job.previousblockhash || job.prevhash || null,
     target: job.blockTarget ? Buffer.from(job.blockTarget).toString('hex') : '---',
     coinbasevalue: job.coinbasevalue || 0,
     tx_count: 0,

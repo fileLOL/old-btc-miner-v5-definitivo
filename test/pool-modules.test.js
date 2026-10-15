@@ -4,8 +4,18 @@ const JobManager=require('../lib/job-manager');
 const ShareValidator=require('../lib/share-validator');
 const MinerTracker=require('../lib/miner-tracker');
 const RateLimiter=require('../lib/rate-limiter');
+const StratumClient=require('../lib/stratum-client');
 
 console.log('=== POOL MODULES TEST ===\n');
+
+console.log('[0] Stratum client job metadata');
+const stratumClient=new StratumClient({},{});
+stratumClient.extranonce1='00000000';
+const stratumJob=stratumClient.assembleJob('metadata-job','11'.repeat(32),'01000000','00000000',[],'20000000','17021ef0','65a00000');
+assert(stratumJob,'Stratum job assembled');
+assert.strictEqual(stratumJob.previousblockhash,'11'.repeat(32),'Stratum previous block hash exposed for UI metadata');
+assert.strictEqual(stratumJob.nbits,'17021ef0','Stratum bits retained for UI metadata');
+console.log('  PASS\n');
 
 const ADDR='bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4';
 
