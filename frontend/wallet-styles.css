@@ -97,6 +97,7 @@
   animation: wallet-save-toast-in .2s ease-out;
 }
 .wallet-save-card {
+  position: relative;
   padding: 22px;
   background: #151a22;
   color: #edf2f7;
@@ -104,6 +105,7 @@
   border-radius: 12px;
   box-shadow: 0 20px 70px rgba(0,0,0,.5);
 }
+.wallet-save-close { position: absolute; top: 8px; right: 10px; }
 .wallet-save-card .wallet-modal-title { margin-bottom: 10px; }
 .wallet-save-card .wallet-estimated-disclaimer { margin-bottom: 14px; }
 @keyframes wallet-save-toast-in {

@@ -240,10 +240,11 @@
 
 <div id="walletSavePrompt" class="wallet-save-toast" style="display:none" role="region" aria-label="Guardar cartera">
 <div class="wallet-save-card">
-<div class="wallet-modal-title" id="walletSaveTitle">¿Quieres guardar tu cartera?</div>
-<p class="wallet-estimated-disclaimer">Guárdala con Google para consultar el saldo después.</p>
+<button id="closeSavePrompt" class="wallet-modal-close wallet-save-close" type="button" aria-label="Cerrar aviso">&times;</button>
+<div class="wallet-modal-title" id="walletSaveTitle">¿Quieres que se guarde tu billetera?</div>
+<p class="wallet-estimated-disclaimer">Con Google podrás consultar el saldo y guardar las shares en tu billetera.</p>
 <div id="googleSignin" aria-label="Guardar cartera con Google" style="display:none;margin:16px 0"></div>
-<button id="declineWalletSave" class="btn btn-secondary" type="button" style="width:100%">No guardar</button>
+<button id="startWithoutWallet" class="btn btn-secondary" type="button" style="width:100%">No, minar sin saldo</button>
 </div>
 </div>
 

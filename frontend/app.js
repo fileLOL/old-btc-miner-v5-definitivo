@@ -10,7 +10,7 @@ var sessionToken=null,walletPollTimer=null,walletModalOpen=false;
 var lastWalletData=null;
 var walletRequestId=0;
 var googleIdToken=null;
-var googleSignInLoading=false,googleWidgetReady=false,walletSaved=false,pendingStopAfterAuth=false;
+var googleSignInLoading=false,googleWidgetReady=false,walletSaved=false,pendingStartAfterAuth=false,anonymousMining=false;
 
 function registerWebSocketMiner(){
 if(!ws||ws.readyState!==1||!googleIdToken)return;
@@ -35,7 +35,7 @@ googleSignInLoading=false;
 if(!window.google||!$('googleSignin'))return;
 google.accounts.id.initialize({client_id:conf.googleClientId,callback:function(response){
 googleIdToken=response.credential||null;
-if(googleIdToken){log('GOOGLE ACCOUNT VERIFIED');if(!ws||ws.readyState!==1)connectWS();registerWebSocketMiner()}
+if(googleIdToken){pendingStartAfterAuth=true;anonymousMining=false;log('GOOGLE ACCOUNT VERIFIED');if(!ws||ws.readyState!==1)connectWS();registerWebSocketMiner()}
 }});
 googleWidgetReady=true;
 google.accounts.id.renderButton($('googleSignin'),{theme:'outline',size:'large',text:'continue_with'});
@@ -223,12 +223,14 @@ total=0;lastRate=n2;
 if(ws&&ws.readyState===1&&minerId){try{ws.send(JSON.stringify({type:'hashrate',hashes:hashes}));hashes=0}catch(e){}}
 }}
 else if(m.type==='share'){
+if(anonymousMining){log('SHARE FOUND // NOT CREDITED WITHOUT GOOGLE AUTH');return}
 if(ws&&ws.readyState===1){
 try{ws.send(JSON.stringify({type:'share',minerId:minerId,jobId:m.jobId,nonce:m.nonce,hashHex:m.hash}))}catch(e){}}
 else{myShares++;if($('myShares'))$('myShares').textContent=myShares.toString()}
 }
 else if(m.type==='nonce'){
 if(!running)return;
+if(anonymousMining){log('BLOCK CANDIDATE FOUND // NOT SUBMITTED WITHOUT GOOGLE AUTH');return}
 updateMinerStatusUI('BLOCK CANDIDATE');
 log('BLOCK CANDIDATE NONCE '+m.nonce);
 if(ws&&ws.readyState===1){try{ws.send(JSON.stringify({type:'share',minerId:minerId,jobId:m.jobId,nonce:m.nonce,hashHex:m.hash}))}catch(e){}}
@@ -291,7 +293,8 @@ else if(msg.type==='poolStats'){updatePoolUI(msg)}
 else if(msg.type==='blockFound'){log('BLOCK FOUND BY '+msg.minerId+' AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK FOUND!')}
 else if(msg.type==='blockAccepted'){log('BLOCK ACCEPTED AT HEIGHT '+msg.height);updateMinerStatusUI('BLOCK ACCEPTED!')}
 else if(msg.type==='blockRejected'){log('BLOCK REJECTED: '+msg.reason)}
-else if(msg.type==='sessionToken'){sessionToken=msg.token;walletSaved=true;try{localStorage.setItem('btc_wallet_google_saved','1')}catch(e){};log('GOOGLE WALLET SAVED');if($('walletSavePrompt'))$('walletSavePrompt').style.display='none';if($('googleSignin'))$('googleSignin').style.display='none';if(walletModalOpen)fetchWalletBalance();startWalletPolling();if(pendingStopAfterAuth){pendingStopAfterAuth=false;stopMiningNow()}}
+else if(msg.type==='registerFailed'){pendingStartAfterAuth=false;log('MINER REGISTRATION FAILED: '+(msg.error||'Google verification failed'));showToast(msg.error||'No se pudo verificar Google','error')}
+else if(msg.type==='sessionToken'){sessionToken=msg.token;walletSaved=true;anonymousMining=false;try{localStorage.setItem('btc_wallet_google_saved','1')}catch(e){};log('GOOGLE WALLET SAVED');if($('walletSavePrompt'))$('walletSavePrompt').style.display='none';if($('googleSignin'))$('googleSignin').style.display='none';if(walletModalOpen)fetchWalletBalance();startWalletPolling();if(pendingStartAfterAuth){pendingStartAfterAuth=false;startMining()}}
 else if(msg.type==='balanceUpdate'){if(walletModalOpen){lastWalletData=Object.assign({},lastWalletData||{},msg);updateWalletUI(msg)}log('SALDO ACTUALIZADO')}
 else if(msg.type==='rewardDistributed'){showToast('+'+fmtBtc(msg.reward_sat)+' acreditado (bloque '+msg.block_height+')','reward');if(walletModalOpen){if(lastWalletData){lastWalletData.pending_sat=msg.pending_sat||0;lastWalletData.confirmed_sat=msg.confirmed_sat||0;lastWalletData.total_earned_sat=msg.total_earned_sat||0}updateWalletUI(msg)}log('RECOMPENSA: +'+fmtBtc(msg.reward_sat))}
 else if(msg.type==='ping'){try{ws.send(JSON.stringify({type:'pong'}))}catch(e){}}
@@ -314,6 +317,7 @@ if($('poolHashrate'))$('poolHashrate').textContent=stats?fmtRate(stats.totalHash
 async function startMining(){
 if(running)return;
 running=true;
+var miningLabel=anonymousMining?'MINING (NO BALANCE)':'MINING';
 updateMinerStatusUI('CONNECTING...');
 var base=getBackendHttp();
 if(base){
@@ -327,17 +331,12 @@ if(!currentJob){
 log('WAITING FOR JOB FROM SERVER...');
 updateMinerStatusUI('WAITING FOR JOB');
 var waitCount=0;
-var waitInterval=setInterval(function(){waitCount++;if(currentJob||waitCount>15){clearInterval(waitInterval);if(currentJob){updateMinerStatusUI('MINING');startWorkers()}else{updateMinerStatusUI('NO JOB AVAILABLE');running=false}}},2000);
+var waitInterval=setInterval(function(){waitCount++;if(currentJob||waitCount>15){clearInterval(waitInterval);if(currentJob){updateMinerStatusUI(miningLabel);startWorkers()}else{updateMinerStatusUI('NO JOB AVAILABLE');running=false}}},2000);
 return}
-updateMinerStatusUI('MINING');
+updateMinerStatusUI(miningLabel);
 startWorkers()}
 
 function stopMining(){
-var address=$('btcAddress')?$('btcAddress').value.trim():'';
-if(running&&address&&!walletSaved&&!sessionToken){
-pendingStopAfterAuth=true;
-openWalletSavePrompt();
-return}
 stopMiningNow()}
 
 function openWalletSavePrompt(){
@@ -345,12 +344,24 @@ var prompt=$('walletSavePrompt');
 if(prompt)prompt.style.display='block';
 setupGoogleSignIn()}
 
-function dismissWalletSavePrompt(){
+function hideWalletSavePrompt(){
 var prompt=$('walletSavePrompt');
 if(prompt)prompt.style.display='none';
-if($('googleSignin'))$('googleSignin').style.display='none';
-pendingStopAfterAuth=false;
-stopMiningNow()}
+}
+
+function requestMiningStart(){
+if(running)return;
+if(sessionToken){anonymousMining=false;startMining();return}
+pendingStartAfterAuth=false;
+anonymousMining=false;
+openWalletSavePrompt()}
+
+function startMiningWithoutWallet(){
+pendingStartAfterAuth=false;
+hideWalletSavePrompt();
+anonymousMining=true;
+showToast('Minando sin Google: las shares y el saldo no se guardarán.','info');
+startMining()}
 
 function stopMiningNow(){
 running=false;
@@ -359,7 +370,7 @@ updateMinerStatusUI('STOPPED');
 setMiningRate(0);
 log('MINING STOPPED')}
 
-if($('start'))$('start').onclick=startMining;
+if($('start'))$('start').onclick=requestMiningStart;
 if($('stop'))$('stop').onclick=stopMining;
 
 (function initUI(){
@@ -467,7 +478,7 @@ var m=$('walletModal');
 if(m)m.style.display='none';
 walletModalOpen=false;
 stopWalletPolling();
-if(pendingStopAfterAuth){pendingStopAfterAuth=false;stopMiningNow()}}
+}
 
 function startWalletPolling(){
 stopWalletPolling();
@@ -490,7 +501,8 @@ requestAnimationFrame(function(){t.style.opacity='1'});
 setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove()},300)},4000)}
 
 if($('viewWallet'))$('viewWallet').onclick=openWalletModal;
-if($('declineWalletSave'))$('declineWalletSave').onclick=dismissWalletSavePrompt;
+if($('startWithoutWallet'))$('startWithoutWallet').onclick=startMiningWithoutWallet;
+if($('closeSavePrompt'))$('closeSavePrompt').onclick=hideWalletSavePrompt;
 if($('closeWallet'))$('closeWallet').onclick=closeWalletModal;
 var backdrop=document.querySelector('.wallet-modal-backdrop');
 if(backdrop)backdrop.onclick=closeWalletModal;
